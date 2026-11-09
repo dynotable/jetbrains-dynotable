@@ -1,0 +1,32 @@
+{
+  "columns": [
+    "o.orderId",
+    "o.status",
+    "c.country"
+  ],
+  "rows": [
+    {
+      "o.orderId": "ORD2024056001",
+      "o.status": "PENDING",
+      "c.country": "Tajikistan"
+    },
+    {
+      "o.orderId": "ORD2024098001",
+      "o.status": "PENDING",
+      "c.country": "China"
+    },
+    {
+      "o.orderId": "ORD2024085001",
+      "o.status": "COMPLETED",
+      "c.country": "Mongolia"
+    }
+  ],
+  "returnedRows": 3,
+  "totalRows": null,
+  "truncated": true,
+  "itemsScanned": 150,
+  "approximateBytes": 220,
+  "elapsedMs": 207,
+  "executedStatement": "SELECT o.orderId, o.status, c.country FROM \"orders\" o JOIN \"customers\" c ON o.customerId = c.customerId",
+  "effectiveRowCap": 3
+}

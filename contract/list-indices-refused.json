@@ -1,0 +1,7 @@
+{
+  "indices": [],
+  "unreachable": [],
+  "indexListingFailed": {
+    "message": "The OpenSearch targets could not be listed."
+  }
+}

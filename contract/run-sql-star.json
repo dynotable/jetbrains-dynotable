@@ -1,0 +1,55 @@
+{
+  "columns": [
+    "amount",
+    "customerId",
+    "items",
+    "orderDate",
+    "orderId",
+    "productId",
+    "status"
+  ],
+  "rows": [
+    {
+      "amount": 149.9,
+      "productId": "PROD001",
+      "orderId": "ORD2024056001",
+      "customerId": "CUST056",
+      "orderDate": "2026-08-17T23:54:37.925Z",
+      "items": [
+        "Standard Pack"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "amount": 75.99,
+      "productId": "PROD002",
+      "orderId": "ORD2024098001",
+      "customerId": "CUST098",
+      "orderDate": "2026-01-03T02:19:15.022Z",
+      "items": [
+        "Premium Kit",
+        "Widget A"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "amount": 440.29,
+      "productId": "PROD005",
+      "orderId": "ORD2024085001",
+      "customerId": "CUST085",
+      "orderDate": "2026-07-03T23:05:35.188Z",
+      "items": [
+        "Premium Kit"
+      ],
+      "status": "COMPLETED"
+    }
+  ],
+  "returnedRows": 3,
+  "totalRows": null,
+  "truncated": true,
+  "itemsScanned": 150,
+  "approximateBytes": 523,
+  "elapsedMs": 130,
+  "executedStatement": "SELECT * FROM \"orders\"",
+  "effectiveRowCap": 3
+}

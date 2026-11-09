@@ -10,10 +10,107 @@
   ]]></description>
 
   <change-notes><![CDATA[
-    <p>0.1.0: first release.</p>
+    <p>0.1.0: first release. Needs a JetBrains IDE 2026.3 or later and DynoTable 1.19.0 or later.</p>
+    <ul>
+      <li>Language features from the DynoTable app for <code>*.dynotable.sql</code>, <code>*.partiql</code> and
+        <code>*.opensearch</code> files: completion, diagnostics with quick fixes, hover, formatting and alias
+        rename. Scratch files and files outside the project get them too.</li>
+      <li>The query plan shows in the lens row above the statement, after Run and Open in DynoTable.</li>
+      <li>Run a statement with the Run lens or Cmd+Enter (Ctrl+Enter). The rows show in the DynoTable Results
+        tool window, with Copy CSV, Copy JSON and Cancel.</li>
+      <li>Open in DynoTable with its lens or Cmd+Shift+Enter (Ctrl+Shift+Enter). Change the shortcuts in
+        Settings › Keymap.</li>
+      <li>Validate against the index, and Stage in DynoTable for PartiQL writes.</li>
+      <li>The DynoTable tool window: an explorer of the profile's DynamoDB tables and OpenSearch indices, with
+        Refresh. A double-click on a table or an index opens a query for it.</li>
+      <li>New Query, Pick OpenSearch Index, Attach SQL File, Select Profile, Reconnect and Open Documentation
+        actions, in Tools › DynoTable.</li>
+      <li>A status bar widget shows the profile, or why DynoTable is not connected and what to do.</li>
+      <li>The SQL files, App path and User data directory settings, in Settings › Tools › DynoTable.</li>
+      <li>Starts DynoTable in the background when it is not running.</li>
+    </ul>
   ]]></change-notes>
 
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.lsp</depends>
   <depends>org.jetbrains.plugins.textmate</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <fileType name="DynoTable SQL" language="DynoTableSQL" patterns="*.dynotable.sql"
+              implementationClass="com.dynotable.files.DynoTableSqlFileType" fieldName="INSTANCE"/>
+    <fileType name="DynoTable PartiQL" language="DynoTablePartiQL" extensions="partiql"
+              implementationClass="com.dynotable.files.PartiQLFileType" fieldName="INSTANCE"/>
+    <fileType name="DynoTable OpenSearch" language="DynoTableOpenSearch" extensions="opensearch"
+              implementationClass="com.dynotable.files.OpenSearchFileType" fieldName="INSTANCE"/>
+    <fileTypeOverrider implementation="com.dynotable.files.SqlFilesOverrider"/>
+
+    <!-- Own file types need both, else the editor throws "Token type ... is not registered". -->
+    <lang.syntaxHighlighterFactory language="DynoTableSQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory language="DynoTablePartiQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory language="DynoTableOpenSearch"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <editorHighlighterProvider filetype="DynoTable SQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+    <editorHighlighterProvider filetype="DynoTable PartiQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+    <editorHighlighterProvider filetype="DynoTable OpenSearch"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+
+    <statusBarWidgetFactory id="DynoTable.Status" implementation="com.dynotable.ui.StatusWidgetFactory"/>
+    <notificationGroup id="DynoTable" displayType="BALLOON"/>
+    <toolWindow id="DynoTable Results" anchor="bottom" canCloseContents="true" icon="/icons/dynotable.svg"
+                factoryClass="com.dynotable.results.ResultsToolWindowFactory"/>
+    <toolWindow id="DynoTable" anchor="left" icon="/icons/dynotable.svg"
+                factoryClass="com.dynotable.explorer.ExplorerToolWindowFactory"/>
+    <actionPromoter implementation="com.dynotable.run.DynoTableActionPromoter"/>
+    <postStartupActivity implementation="com.dynotable.connect.RestoredEditors"/>
+    <codeInsight.codeVisionProvider implementation="com.dynotable.editor.PlanCodeVisionProvider"/>
+    <platform.lsp.integrationProvider implementation="com.dynotable.connect.DynoTableIntegrationProvider"/>
+
+    <projectConfigurable parentId="tools" id="com.dynotable.settings" displayName="DynoTable" nonDefaultProject="true"
+                         instance="com.dynotable.settings.DynoTableConfigurable"/>
+  </extensions>
+
+  <applicationListeners>
+    <listener class="com.dynotable.connect.ConnectClosing" topic="com.intellij.openapi.project.ProjectCloseListener"/>
+  </applicationListeners>
+
+  <projectListeners>
+    <listener class="com.dynotable.connect.EditorTrigger" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="com.dynotable.explorer.ExplorerShown" topic="com.intellij.openapi.wm.ex.ToolWindowManagerListener"/>
+  </projectListeners>
+
+  <actions>
+    <group id="DynoTable.Tools" text="DynoTable" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <action id="DynoTable.Run" class="com.dynotable.run.RunAction" text="Run DynoTable Query"
+              description="Run the selection, else the statement at the caret, else the whole file">
+        <keyboard-shortcut keymap="$default" first-keystroke="control ENTER"/>
+      </action>
+      <action id="DynoTable.Open" class="com.dynotable.run.OpenAction" text="Open in DynoTable"
+              description="Open the statement at the caret in DynoTable">
+        <keyboard-shortcut keymap="$default" first-keystroke="control shift ENTER"/>
+      </action>
+      <action id="DynoTable.NewQuery" class="com.dynotable.query.NewQueryAction" text="New DynoTable Query"
+              description="Open a new query: on an explorer table or index, a query for it; else in the language you choose"/>
+      <action id="DynoTable.PickIndex" class="com.dynotable.query.PickIndexAction" text="Pick OpenSearch Index"
+              description="Write the chosen OpenSearch index into the first line of the query"/>
+      <action id="DynoTable.AttachSqlFile" class="com.dynotable.actions.AttachSqlFileAction" text="Attach SQL File to DynoTable"
+              description="Add the SQL file in the editor to the SQL files that DynoTable serves"/>
+      <action id="DynoTable.SelectProfile" class="com.dynotable.profiles.SelectProfileAction" text="Select DynoTable Profile"
+              description="Choose the DynoTable profile that runs queries and lists tables"/>
+      <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
+              description="Connect to DynoTable again"/>
+      <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"
+              description="Open the DynoTable documentation for editors"/>
+      <action id="DynoTable.RefreshExplorer" class="com.dynotable.explorer.RefreshExplorerAction" text="Refresh DynoTable Explorer"
+              description="List the tables and indices again" icon="AllIcons.Actions.Refresh"/>
+    </group>
+  </actions>
+
+  <extensions defaultExtensionNs="com.intellij.textmate">
+    <bundleProvider implementation="com.dynotable.files.TextMateBundle"/>
+  </extensions>
 </idea-plugin>

@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "PartiQL writes are not run from the editor. Use \"Stage in DynoTable\" to open the table in the app — the statement stays here.",
+  "data": {
+    "code": "stage-in-app"
+  }
+}

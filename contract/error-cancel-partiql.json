@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "The run was cancelled before it finished.",
+  "data": {
+    "code": "run-failed"
+  }
+}

@@ -671,7 +671,7 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 - [x] every row of the reference regression map has its counterparts or a written reason
 - [x] run `./gradlew gate` (2026-11-09, orchestrator: green; fresh `test --rerun` 306 passed, 0 failed, 0 skipped; verifyPlugin IU-263.7307.200 and DB-263.7307.216 Compatible)
 - [x] run `./gradlew testLive` (2026-11-09, orchestrator: 25 passed, 0 failed, 0 skipped, isolated dev build 1.19.1)
-- [ ] manual `runIde` check in IDEA and DataGrip: lens row, Cmd+Enter, Cmd+Shift+Enter, explorer, results, status widget
+- [x] manual `runIde` check in IDEA and DataGrip: lens row, Cmd+Enter, Cmd+Shift+Enter, explorer, results, status widget (2026-11-09: IntelliJ IDEA 2026.3 checked in a real IDE window against the isolated dev app 1.19.1, driven by Codex Computer Use: Cmd+Enter runs the statement at the caret (incl. before the closing `;`) and a selection only, as in VS Code; a caret after the `;` or on an empty line sends the whole file, which the server refuses as multi-statement, also as in VS Code; Run/Open lens clicks, plan on the lens row at session start (the server sends a plan only for the orders scan), results window, explorer, profile picker, status widget, and Split Line in a plain `.sql` file all pass. DataGrip: not checked in a real window (the sandbox DataGrip clone hung at start); covered by `verifyPlugin` (Compatible) and the Task 1 spike `runIde` shortcut check in DataGrip; full DataGrip UI check moved to Post-Completion › Manual verification, user decision)
 
 #### Task 19 results (2026-11-09, read-only audit; no Gradle run)
 
@@ -868,5 +868,6 @@ a run refused with an empty message shows our general sentence.
 - A post only after the user has seen the exact media (memory: media-before-post).
 
 **Manual verification**
+- DataGrip UI check in a real window (lens row, Cmd+Enter / Cmd+Shift+Enter, explorer, results, status widget); IntelliJ IDEA passed on 2026-11-09.
 - Windows and Linux are not verified (same as VS Code).
 - Trello: no DynoTable board is known; the `feature-card` skill is not installed in this session.

@@ -2,8 +2,8 @@ package com.dynotable.connect
 
 import com.dynotable.harness.harnessFixture
 import com.dynotable.harness.waitFor
-import com.dynotable.profiles.RequestedProfile
 import com.dynotable.settings.DynoTableWorkspaceSettings
+import com.dynotable.settings.RequestedProfile
 import com.dynotable.status.Action
 import com.dynotable.status.Reason
 import com.dynotable.status.Status

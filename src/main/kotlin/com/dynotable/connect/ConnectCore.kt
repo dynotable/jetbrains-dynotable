@@ -7,7 +7,10 @@ import com.dynotable.explorer.listingOf
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.profiles.ProfilePicker
 import com.dynotable.protocol.ListTablesResult
+import com.dynotable.protocol.METHOD_NOT_FOUND_CODE
 import com.dynotable.protocol.PortFile
+import com.dynotable.protocol.failureCode
+import com.dynotable.refusals.NO_SENTENCE
 import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableAppSettings
 import com.dynotable.settings.DynoTableConfigurable
@@ -63,7 +66,7 @@ const val DOCS_URL = "https://dynotable.com/docs/editors"
  * clients, the port-file watcher, the status and the reason actions.
  */
 @Service(Service.Level.PROJECT)
-class ConnectCore(private val project: Project, internal val cs: CoroutineScope) : Disposable {
+class ConnectCore(private val project: Project, private val cs: CoroutineScope) : Disposable {
   private val testMode = ApplicationManager.getApplication().isUnitTestMode
   private val overrides = Overrides.of(testMode, System::getProperty)
   private val platform = Platform.current()
@@ -133,7 +136,7 @@ class ConnectCore(private val project: Project, internal val cs: CoroutineScope)
       } catch (_: SessionEnded) {
         null
       } catch (e: ResponseErrorException) {
-        tables.complete(Listing.Failed(e.responseError.message.orEmpty()))
+        tables.complete(Listing.Failed(e.responseError.message.orEmpty().ifBlank { NO_SENTENCE }))
         when {
           e.responseError.code == METHOD_NOT_FOUND_CODE -> Reason.MISSING_REQUEST
           failureCode(e.responseError) == "profile-required" -> Reason.UNBOUND
@@ -199,8 +202,9 @@ class ConnectCore(private val project: Project, internal val cs: CoroutineScope)
   }
 
   /**
-   * Decision 6: the server publishes diagnostics for every document it opened. `false` when the file
-   * cannot be open on the server; else waits up to 3 s for that sign, then lets the command go.
+   * The server publishes diagnostics for every document it opened, and refuses a command on a
+   * document it has not opened. `false` when the file cannot be open on the server; else waits up to
+   * 3 s for that sign, then lets the command go.
    */
   suspend fun awaitServerOpened(file: VirtualFile): Boolean {
     val current = descriptor ?: return false
@@ -211,7 +215,7 @@ class ConnectCore(private val project: Project, internal val cs: CoroutineScope)
     if (!local) return false
     val uri = current.getFileUri(file)
     withTimeoutOrNull(OPENED_WAIT_MS) {
-      while (uri !in current.published) delay(50)
+      while (uri !in current.published) delay(OPENED_POLL_MS)
     }
     return true
   }
@@ -265,10 +269,10 @@ class ConnectCore(private val project: Project, internal val cs: CoroutineScope)
    */
   private fun watchPortFile() {
     cs.launch(Dispatchers.IO) {
-      var seen = readPort()?.let { it.port to it.token }
+      var seen = readPort()?.key
       while (true) {
         delay(WATCH_MS)
-        val key = readPort()?.let { it.port to it.token }
+        val key = readPort()?.key
         if (key != null && key != seen) machine.portFileChanged()
         seen = key
       }
@@ -279,6 +283,7 @@ class ConnectCore(private val project: Project, internal val cs: CoroutineScope)
 
   companion object {
     private const val OPENED_WAIT_MS = 3_000L
+    private const val OPENED_POLL_MS = 50L
     private const val WATCH_MS = 500L
     private const val TRUST_ACTION = "ShowTrustProjectDialog"
 

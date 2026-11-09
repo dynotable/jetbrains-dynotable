@@ -4,6 +4,9 @@ import com.dynotable.files.DynoTableFileType
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.files.PartiQLFileType
 import com.dynotable.editor.DynoTableCustomization
+import com.dynotable.protocol.LIST_INDICES
+import com.dynotable.protocol.LIST_PROFILES
+import com.dynotable.protocol.LIST_TABLES
 import com.dynotable.protocol.PortFile
 import com.dynotable.settings.DynoTableWorkspaceSettings
 import com.google.gson.JsonElement
@@ -25,13 +28,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** The server's custom requests (PROTOCOL.md). */
 interface DynoTableServer : LanguageServer {
-  @JsonRequest("dynotable/listProfiles")
+  @JsonRequest(LIST_PROFILES)
   fun listProfiles(): CompletableFuture<JsonElement>
 
-  @JsonRequest("dynotable/listTables")
+  @JsonRequest(LIST_TABLES)
   fun listTables(params: JsonObject): CompletableFuture<JsonElement>
 
-  @JsonRequest("dynotable/listIndices")
+  @JsonRequest(LIST_INDICES)
   fun listIndices(params: JsonObject): CompletableFuture<JsonElement>
 }
 

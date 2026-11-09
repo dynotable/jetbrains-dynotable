@@ -5,11 +5,13 @@ import com.dynotable.files.DynoTableSqlFileType
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.harness.PopupRow
 import com.dynotable.harness.harnessFixture
+import com.dynotable.harness.integrationTest
 import com.dynotable.harness.waitFor
 import com.dynotable.profiles.ProfilePicker
+import com.dynotable.protocol.RUN_STATEMENT
 import com.dynotable.query.IndexPicker
 import com.dynotable.query.NewQuery
-import com.dynotable.refusals.RUN_STATEMENT
+import com.dynotable.refusals.NO_SENTENCE
 import com.dynotable.status.Action
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
@@ -26,7 +28,6 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.platform.testFramework.junit5.codeInsight.fixture.codeInsightFixture
-import com.intellij.testFramework.common.timeoutRunBlocking
 import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
@@ -34,11 +35,12 @@ import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.util.ui.tree.TreeUtil
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -50,7 +52,6 @@ import java.util.concurrent.CompletableFuture
 import javax.swing.JComponent
 import javax.swing.plaf.basic.BasicHTML
 import javax.swing.tree.DefaultMutableTreeNode
-import kotlin.time.Duration.Companion.minutes
 
 /** The explorer tool window, New Query and Pick Index, against the fake server. */
 @TestApplication
@@ -65,17 +66,10 @@ class ExplorerTest {
   private val explorer get() = Explorer.getInstance(project.get())
   private val newQuery get() = NewQuery.getInstance(project.get())
 
-  private fun run(test: suspend CoroutineScope.() -> Unit) = timeoutRunBlocking(2.minutes) { test() }
-
-  private suspend fun connected(): Int {
-    waitFor("connected, now ${h.core.status}") { h.core.status is Status.Connected }
-    return (h.core.status as Status.Connected).attempt
-  }
-
   /** Connects as a shown explorer does, and waits for the first full tree. */
   private suspend fun listed(): List<Node> {
     h.core.trigger()
-    connected()
+    h.connected()
     var tree = emptyList<Node>()
     waitFor("the tables and the indices") { explorer.tree().also { tree = it }.size == 2 }
     return tree
@@ -120,10 +114,10 @@ class ExplorerTest {
   )
 
   @Test
-  fun `showing the explorer connects and draws the tables and indices, and showing it again after a Stop reconnects`() = run {
+  fun `showing the explorer connects and draws the tables and indices, and showing it again after a Stop reconnects`() = integrationTest {
     h.fake.start()
     val panel = showExplorer()
-    val attempt = connected()
+    val attempt = h.connected()
     val expected = listOf("DynamoDB", "  customers", "  large-products", "  orders", "  set-types", "OpenSearch", "  target-1") +
       listOf("analytics", "customers", "large-products", "orders", "products", "products-vectors").map { "    $it" }
     waitFor("the drawn tree, now ${rows(panel)}") { rows(panel) == expected }
@@ -131,12 +125,12 @@ class ExplorerTest {
     h.platformStop(h.clients().single())
     h.awaitStatus(Status.Disconnected(Reason.STOPPED))
     project.get().messageBus.syncPublisher(ToolWindowManagerListener.TOPIC).toolWindowShown(explorerWindow())
-    assertTrue(connected() > attempt)
+    assertTrue(h.connected() > attempt)
   }
 
   // Without `fresh`, the server answers from its cache, so Refresh would show nothing new.
   @Test
-  fun `Refresh sends fresh true to both listings`() = run {
+  fun `Refresh sends fresh true to both listings`() = integrationTest {
     h.fake.start()
     listed()
     explorer.refresh()
@@ -147,19 +141,19 @@ class ExplorerTest {
 
   // A VPC-only OpenSearch domain off the VPN takes about 30 s to fail.
   @Test
-  fun `tables show while the index listing is still in flight`() = run {
+  fun `tables show while the index listing is still in flight`() = integrationTest {
     val held = CompletableFuture<Any?>()
     h.fake.handle("dynotable/listIndices") { _, _ -> held }
     h.fake.start()
     h.core.trigger()
-    connected()
+    h.connected()
     assertEquals(listOf("DynamoDB"), explorer.tree().map { it.label })
     held.complete(h.fake.fixture("list-indices.json"))
     waitFor("the OpenSearch group") { explorer.tree().map { it.label } == listOf("DynamoDB", "OpenSearch") }
   }
 
   @Test
-  fun `drops a replaced session's listing`() = run {
+  fun `drops a replaced session's listing`() = integrationTest {
     h.fake.start()
     listed()
     val held = CompletableFuture<Any?>()
@@ -178,7 +172,7 @@ class ExplorerTest {
 
   // Another profile has other tables; the old profile's tree must not stay.
   @Test
-  fun `a profile change refetches`() = run {
+  fun `a profile change refetches`() = integrationTest {
     h.fake.start()
     listed()
     h.fake.handle("dynotable/listTables") { _, _ -> JsonParser.parseString("""{"tables":["after-switch"]}""") }
@@ -189,7 +183,7 @@ class ExplorerTest {
 
   // The `didOpen` URI is encoded (a space is `%20`); a Run sent with another spelling of it is refused.
   @Test
-  fun `a table opens its SELECT star query in a scratch file the server opens, and Run there sends the didOpen URI`() = run {
+  fun `a table opens its SELECT star query in a scratch file the server opens, and Run there sends the didOpen URI`() = integrationTest {
     h.fake.start()
     val customers = group(listed(), "DynamoDB").first()
     newQuery.open(customers)
@@ -208,7 +202,7 @@ class ExplorerTest {
   }
 
   @Test
-  fun `an index opens an OpenSearch query with its directive`() = run {
+  fun `an index opens an OpenSearch query with its directive`() = integrationTest {
     h.fake.start()
     val tree = listed()
     val analytics = (group(tree, "OpenSearch").single() as Node.Target).children.first()
@@ -219,7 +213,7 @@ class ExplorerTest {
   }
 
   @Test
-  fun `New Query on an index that cannot be pinned warns and opens nothing`() = run {
+  fun `New Query on an index that cannot be pinned warns and opens nothing`() = integrationTest {
     h.fake.handle("dynotable/listIndices") { _, _ -> indices("logs" to "search 1", "logs" to "search-2") }
     h.fake.start()
     val tree = listed()
@@ -233,7 +227,7 @@ class ExplorerTest {
 
   // A file name the DynoTable file types do not match gets no completion, lens or Run.
   @Test
-  fun `New Query in SQL through the language picker opens a file the server opens as sql`() = run {
+  fun `New Query in SQL through the language picker opens a file the server opens as sql`() = integrationTest {
     h.fake.start()
     h.popupAnswer = "SQL"
     newQuery.open(null)
@@ -251,7 +245,7 @@ class ExplorerTest {
   }
 
   @Test
-  fun `Pick Index writes line 0 of a New Query OpenSearch file`() = run {
+  fun `Pick Index writes line 0 of a New Query OpenSearch file`() = integrationTest {
     h.fake.handle("dynotable/listIndices") { _, _ -> indices("products" to "search-1") }
     h.fake.start()
     val document = newOpenSearchQuery().document
@@ -262,11 +256,11 @@ class ExplorerTest {
 
   // The listing came from the replaced session, maybe for another profile.
   @Test
-  fun `Pick Index writes nothing when the session changes while the picker is open`() = run {
+  fun `Pick Index writes nothing when the session changes while the picker is open`() = integrationTest {
     h.fake.handle("dynotable/listIndices") { _, _ -> indices("products" to "search-1") }
     h.fake.start()
     val document = newOpenSearchQuery().document
-    val attempt = connected()
+    val attempt = h.connected()
     h.popupAnswer = "products"
     h.duringPopup = {
       h.core.perform(Action.RECONNECT)
@@ -277,7 +271,7 @@ class ExplorerTest {
   }
 
   @Test
-  fun `Pick Index warns and writes nothing when no index is listed or the pick cannot be pinned`() = run {
+  fun `Pick Index warns and writes nothing when no index is listed or the pick cannot be pinned`() = integrationTest {
     var answer = indices()
     h.fake.handle("dynotable/listIndices") { _, _ -> answer }
     h.fake.start()
@@ -294,7 +288,7 @@ class ExplorerTest {
 
   // A JLabel renders a text that starts with <html> as HTML, which can load an image from anywhere.
   @Test
-  fun `a hostile table name shows as text in the tree`() = run {
+  fun `a hostile table name shows as text in the tree`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("dynotable/listTables") { _, _ -> JsonParser.parseString("""{"tables":[${Gson().toJson(hostile)}]}""") }
     h.fake.start()
@@ -312,7 +306,7 @@ class ExplorerTest {
   }
 
   @Test
-  fun `Pick Index shows a hostile index and target name as text`() = run {
+  fun `Pick Index shows a hostile index and target name as text`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("dynotable/listIndices") { _, _ -> JsonParser.parseString("""{"indices":[{"name":${Gson().toJson(hostile)},"target":${Gson().toJson(hostile)}}],"unreachable":[]}""") }
     h.fake.start()
@@ -322,8 +316,18 @@ class ExplorerTest {
     assertEquals(listOf(PopupRow("\u200B$hostile", true, "\u200B$hostile")), h.popups.single())
   }
 
+  // The platform refuses a notification with no text; a tree row with no text says nothing too.
   @Test
-  fun `the unbound state shows its reason as the tree message`() = run {
+  fun `a table listing refused with no message shows the generic sentence, at connect and after Refresh`() = integrationTest {
+    h.fake.handle("dynotable/listTables") { _, _ -> throw ResponseErrorException(ResponseError(-32603, "", null)) }
+    h.fake.start()
+    assertEquals(listOf(Node.Message(NO_SENTENCE)), group(listed(), "DynamoDB"))
+    explorer.refresh()
+    assertEquals(listOf(Node.Message(NO_SENTENCE)), group(explorer.tree(), "DynamoDB"))
+  }
+
+  @Test
+  fun `the unbound state shows its reason as the tree message`() = integrationTest {
     h.fake.handle("dynotable/listTables") { _, _ -> throw h.fake.refusal("error-profile-required.json") }
     h.fake.start()
     val panel = showExplorer()

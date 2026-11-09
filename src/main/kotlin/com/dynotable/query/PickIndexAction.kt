@@ -2,11 +2,12 @@ package com.dynotable.query
 
 import com.dynotable.connect.ConnectCore
 import com.dynotable.editor.ServerCommands
-import com.dynotable.editor.UNREADABLE
 import com.dynotable.explorer.indexFailures
 import com.dynotable.files.OpenSearchFileType
+import com.dynotable.protocol.LIST_INDICES
 import com.dynotable.protocol.ListIndicesResult
 import com.dynotable.protocol.ProtocolException
+import com.dynotable.refusals.UNREADABLE
 import com.dynotable.refusals.notify
 import com.dynotable.ui.choose
 import com.dynotable.ui.plain
@@ -82,8 +83,6 @@ class IndexPicker(private val project: Project, private val cs: CoroutineScope) 
   }
 
   companion object {
-    private const val LIST_INDICES = "dynotable/listIndices"
-
     fun getInstance(project: Project): IndexPicker = project.service()
   }
 }

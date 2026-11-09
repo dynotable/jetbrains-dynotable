@@ -276,7 +276,7 @@ class ConnectMachine(
         setStatus(Status.Starting())
         retire()
         stopClients().join()
-        status = Status.Hidden
+        setStatus(Status.Hidden)
         ensure()?.join()
         Unit
       } finally {
@@ -430,8 +430,6 @@ class ConnectMachine(
     status = next
     seams.onStatus(next)
   }
-
-  private val PortFile.key get() = port to token
 
   private companion object {
     /** Longer than the server's own 30 s handshake deadline, so the server's answer arrives first. */

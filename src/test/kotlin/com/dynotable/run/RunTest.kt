@@ -5,13 +5,14 @@ import com.dynotable.editor.NO_OPEN
 import com.dynotable.editor.OPEN_CHANGED
 import com.dynotable.editor.PLAN_PROVIDER_ID
 import com.dynotable.editor.ServerCommands
-import com.dynotable.editor.UNREADABLE
 import com.dynotable.harness.harnessFixture
+import com.dynotable.harness.integrationTest
 import com.dynotable.harness.lensRow
 import com.dynotable.harness.serverLenses
 import com.dynotable.harness.waitFor
-import com.dynotable.refusals.OPEN_IN_APP
-import com.dynotable.refusals.RUN_STATEMENT
+import com.dynotable.protocol.OPEN_IN_APP
+import com.dynotable.protocol.RUN_STATEMENT
+import com.dynotable.refusals.UNREADABLE
 import com.dynotable.results.BUSY
 import com.dynotable.results.RESULTS_TOOL_WINDOW
 import com.dynotable.results.Results
@@ -49,7 +50,6 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.platform.testFramework.junit5.codeInsight.fixture.codeInsightFixture
 import com.intellij.testFramework.TestActionEvent
-import com.intellij.testFramework.common.timeoutRunBlocking
 import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
@@ -88,7 +88,6 @@ import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import javax.swing.plaf.basic.BasicHTML
 import kotlin.concurrent.thread
-import kotlin.time.Duration.Companion.minutes
 
 /** Run, Open in DynoTable, Stage, the results tool window and the shortcuts, against the fake server. */
 @TestApplication
@@ -102,8 +101,6 @@ class RunTest {
 
   private val results get() = Results.getInstance(project.get())
 
-  private fun run(test: suspend CoroutineScope.() -> Unit) = timeoutRunBlocking(2.minutes) { test() }
-
   private suspend fun open(name: String, text: String = TWO_STATEMENTS): Editor =
     withContext(Dispatchers.EDT) { fixture.configureByText(name, text).let { fixture.editor } }
 
@@ -111,11 +108,6 @@ class RunTest {
   private fun start() {
     h.fake.handle("textDocument/codeLens") { params, _ -> runLenses(params) }
     h.fake.start()
-  }
-
-  private suspend fun connected(): Int {
-    waitFor("connected, now ${h.core.status}") { h.core.status is Status.Connected }
-    return (h.core.status as Status.Connected).attempt
   }
 
   private suspend fun runIn(editor: Editor) = ServerCommands.getInstance(project.get()).run(editor)
@@ -179,7 +171,7 @@ class RunTest {
   )
 
   @Test
-  fun `caret Run sends the range of the statement at the caret and shows its rows`() = run {
+  fun `caret Run sends the range of the statement at the caret and shows its rows`() = integrationTest {
     start()
     val editor = open("caret.dynotable.sql")
     caret(editor, 1, 5)
@@ -189,7 +181,7 @@ class RunTest {
   }
 
   @Test
-  fun `selection Run sends exactly start and end`() = run {
+  fun `selection Run sends exactly start and end`() = integrationTest {
     start()
     val editor = open("selection.partiql", "SELECT * FROM \"orders\" WHERE x = 1")
     withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 22) }
@@ -199,11 +191,11 @@ class RunTest {
 
   // A cold start can take seconds, and the user can change the selection meanwhile.
   @Test
-  fun `a selection changed before the server opened the file runs the new selection`() = run {
+  fun `a selection changed before the server opened the file runs the new selection`() = integrationTest {
     h.fake.ignoreOpens = true
     h.fake.start()
     val editor = open("late.partiql", "SELECT * FROM \"orders\" WHERE x = 1")
-    connected()
+    h.connected()
     withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 6) }
     // The run starts before the selection changes, and waits for the server's open sign.
     val job = launch(start = CoroutineStart.UNDISPATCHED) { runIn(editor) }
@@ -214,7 +206,7 @@ class RunTest {
 
   // The server refuses a blank-text range for opensearch.
   @Test
-  fun `OpenSearch Run with no selection sends no range`() = run {
+  fun `OpenSearch Run with no selection sends no range`() = integrationTest {
     start()
     runIn(open("q.opensearch", "// dynotable: index=orders\n{\"query\": {\"match_all\": {}}}"))
     assertFalse(lastRun().has("range"), "${lastRun()}")
@@ -222,7 +214,7 @@ class RunTest {
 
   // Running the whole file instead could run statements the user did not mean to run.
   @Test
-  fun `a refused lens request shows the server sentence and runs nothing`() = run {
+  fun `a refused lens request shows the server sentence and runs nothing`() = integrationTest {
     h.fake.handle("textDocument/codeLens") { _, _ -> throw h.fake.refusal("error-signed-out.json") }
     h.fake.start()
     runIn(open("refused.dynotable.sql"))
@@ -232,7 +224,7 @@ class RunTest {
 
   // The lens range is for the text before the edit; there it selects the first statement.
   @Test
-  fun `an edit while the lens request is pending runs nothing`() = run {
+  fun `an edit while the lens request is pending runs nothing`() = integrationTest {
     withoutCodeVision {
       h.fake.start()
       val editor = open("edited.dynotable.sql")
@@ -251,7 +243,7 @@ class RunTest {
 
   // A JLabel renders a text that starts with <html> as HTML, which can load an image from anywhere.
   @Test
-  fun `an integer cell shows 1, and a hostile column, cell and statement show as text`() = run {
+  fun `an integer cell shows 1, and a hostile column, cell and statement show as text`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", hostile), listOf(mapOf("n" to 1, hostile to hostile)), hostile) }
     start()
@@ -273,7 +265,7 @@ class RunTest {
   }
 
   @Test
-  fun `an empty result shows its statement and No rows, with no table`() = run {
+  fun `an empty result shows its statement and No rows, with no table`() = integrationTest {
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(emptyList(), emptyList(), "SELECT * FROM \"empty\"") }
     start()
     val panel = panel()
@@ -288,7 +280,7 @@ class RunTest {
 
   // Copy is the only way out of the view, so the only place for the formula guard.
   @Test
-  fun `Copy CSV and the table's Cmd+C apply the formula guard, and Copy JSON keeps the values`() = run {
+  fun `Copy CSV and the table's Cmd+C apply the formula guard, and Copy JSON keeps the values`() = integrationTest {
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("v", "n"), listOf(mapOf("v" to "=1+1", "n" to mapOf("qty" to 1)))) }
     start()
     val panel = panel()
@@ -309,7 +301,7 @@ class RunTest {
   }
 
   @Test
-  fun `Cancel sends a cancel for the run, shows the cancelled view and no notification`() = run {
+  fun `Cancel sends a cancel for the run, shows the cancelled view and no notification`() = integrationTest {
     start()
     val panel = panel()
     val job = heldRun(open("cancel.partiql", "SELECT * FROM \"orders\""))
@@ -324,7 +316,7 @@ class RunTest {
 
   // A view that was not yet redrawn can still show an earlier run's Cancel.
   @Test
-  fun `a cancel for another run leaves the current run alone`() = run {
+  fun `a cancel for another run leaves the current run alone`() = integrationTest {
     start()
     val job = heldRun(open("stale.partiql", "SELECT * FROM \"orders\""))
     results.cancel("an-earlier-run")
@@ -336,7 +328,7 @@ class RunTest {
   }
 
   @Test
-  fun `removing the tool window content cancels the run`() = run {
+  fun `removing the tool window content cancels the run`() = integrationTest {
     start()
     val panel = panel()
     val job = heldRun(open("close.partiql", "SELECT * FROM \"orders\""))
@@ -349,7 +341,7 @@ class RunTest {
   }
 
   @Test
-  fun `a second Run while one runs is refused and sends nothing`() = run {
+  fun `a second Run while one runs is refused and sends nothing`() = integrationTest {
     start()
     val editor = open("one.partiql", "SELECT * FROM \"orders\"")
     val job = heldRun(editor)
@@ -361,21 +353,21 @@ class RunTest {
   }
 
   @Test
-  fun `Reconnect during a run waits for the run`() = run {
+  fun `Reconnect during a run waits for the run`() = integrationTest {
     start()
     val job = heldRun(open("reconnect.partiql", "SELECT * FROM \"orders\""))
-    val attempt = connected()
+    val attempt = h.connected()
     h.core.perform(Action.RECONNECT)
     h.awaitStatus(Status.Starting(waitingForRun = true))
     h.fake.releaseRuns()
     job.join()
     assertTrue(results.view is View.Result)
-    assertTrue(connected() > attempt)
+    assertTrue(h.connected() > attempt)
   }
 
   // A stopped client never completes its requests: a run left waiting would hold the view for good.
   @Test
-  fun `a latch during a run fails the run at once and frees the next Run`() = run {
+  fun `a latch during a run fails the run at once and frees the next Run`() = integrationTest {
     start()
     val editor = open("latch.partiql", "SELECT * FROM \"orders\"")
     val job = heldRun(editor)
@@ -384,18 +376,18 @@ class RunTest {
     withTimeout(5_000) { job.join() }
     h.fake.holdRuns = false
     h.core.perform(Action.RECONNECT)
-    connected()
+    h.connected()
     runIn(editor)
     assertTrue(results.view is View.Result)
     assertFalse(BUSY in h.sentences())
   }
 
   @Test
-  fun `a platform Restart during a run fails the run and frees the next Run`() = run {
+  fun `a platform Restart during a run fails the run and frees the next Run`() = integrationTest {
     start()
     val editor = open("restart.partiql", "SELECT * FROM \"orders\"")
     val job = heldRun(editor)
-    val attempt = connected()
+    val attempt = h.connected()
     h.platformRestart(h.clients().single())
     withTimeout(5_000) { job.join() }
     h.awaitStatus(Status.Connected(attempt))
@@ -406,7 +398,7 @@ class RunTest {
   }
 
   @Test
-  fun `Cmd+Enter during a cold start runs once the file is open on the server`() = run {
+  fun `Cmd+Enter during a cold start runs once the file is open on the server`() = integrationTest {
     h.fake.initializeDelayMs = 1500
     start()
     open("cold.partiql", "SELECT * FROM \"orders\"")
@@ -417,7 +409,7 @@ class RunTest {
   }
 
   @Test
-  fun `an answer that is not a RunResult shows one error and keeps the last view`() = run {
+  fun `an answer that is not a RunResult shows one error and keeps the last view`() = integrationTest {
     start()
     val editor = open("unreadable.partiql", "SELECT * FROM \"orders\"")
     runIn(editor)
@@ -430,10 +422,10 @@ class RunTest {
   }
 
   @Test
-  fun `Run after connection-ended shows the reason and never the running view`() = run {
+  fun `Run after connection-ended shows the reason and never the running view`() = integrationTest {
     start()
     val editor = open("ended.partiql", "SELECT * FROM \"orders\"")
-    connected()
+    h.connected()
     h.fake.sessions.forEach { it.socket.close() }
     h.awaitStatus(Status.Disconnected(Reason.CONNECTION_ENDED))
     waitFor("the latch's notification") { h.notifications.isNotEmpty() }
@@ -452,7 +444,7 @@ class RunTest {
 
   // As the IDE picks the action for a keystroke: the keymap's actions, then the promoters, then the first enabled one.
   @Test
-  fun `Cmd+Enter and Cmd+Shift+Enter run and open in a DynoTable file, and elsewhere split the line and complete the statement`() = run {
+  fun `Cmd+Enter and Cmd+Shift+Enter run and open in a DynoTable file, and elsewhere split the line and complete the statement`() = integrationTest {
     for ((n, keymap, modifier) in listOf(Triple(1, "\$default", "control"), Triple(2, "Mac OS X 10.5+", "meta"))) {
       fun ids(keystroke: String) = KeymapManagerEx.getInstanceEx().getKeymap(keymap)!!
         .getActionIdList(KeyboardShortcut(KeyStroke.getKeyStroke("$modifier $keystroke"), null))
@@ -472,7 +464,7 @@ class RunTest {
 
   // The platform recomputes only its own lenses when a session starts. Inline, the plan sits after the caret while one types.
   @Test
-  fun `the plan shows on its statement's lens row once the session starts with the file open, and not inline`() = run {
+  fun `the plan shows on its statement's lens row once the session starts with the file open, and not inline`() = integrationTest {
     h.fake.handle("textDocument/inlayHint") { _, _ -> listOf(InlayHint(Position(1, 26), Either.forLeft("Scan customers · ~100 items"))) }
     val refreshes = CopyOnWriteArrayList<Status>()
     val lifetime = LifetimeDefinition()
@@ -498,7 +490,7 @@ class RunTest {
 
   // The plan is a hint only: a refused request must show nothing, and must not hold back the server's lenses.
   @Test
-  fun `a refused plan request shows no plan`() = run {
+  fun `a refused plan request shows no plan`() = integrationTest {
     h.fake.handle("textDocument/inlayHint") { _, _ -> throw ResponseErrorException(ResponseError(-32603, "Internal error", null)) }
     val refreshes = CopyOnWriteArrayList<Unit>()
     val lifetime = LifetimeDefinition()
@@ -520,7 +512,7 @@ class RunTest {
 
   // The host shows all lenses together once every provider returned: a plan that waits holds back Run and Open.
   @Test
-  fun `a plan request with no answer does not hold back the lens row`() = run {
+  fun `a plan request with no answer does not hold back the lens row`() = integrationTest {
     val unanswered = CompletableFuture<Any?>()
     h.fake.handle("textDocument/inlayHint") { _, _ -> unanswered }
     start()
@@ -537,7 +529,7 @@ class RunTest {
 
   // A click must take the run path; the platform's own command handling sends a notification and loses the answer.
   @Test
-  fun `a Run lens click runs with the lens argument's range and shows the rows`() = run {
+  fun `a Run lens click runs with the lens argument's range and shows the rows`() = integrationTest {
     start()
     val editor = open("click.dynotable.sql")
     val run = serverLenses(fixture, editor).single { (line, entry) -> line == 1 && entry.text == "Run" }.second as ClickableTextCodeVisionEntry
@@ -548,7 +540,7 @@ class RunTest {
 
   // The server decides which statements get Open and with what arguments; the shortcut reuses them.
   @Test
-  fun `caret Open sends the Open lens argument of the statement at the caret`() = run {
+  fun `caret Open sends the Open lens argument of the statement at the caret`() = integrationTest {
     h.fake.handle("textDocument/codeLens") { params, _ -> openLenses(params) }
     h.fake.start()
     val editor = open("caret-open.dynotable.sql")
@@ -560,7 +552,7 @@ class RunTest {
 
   // Without a lens, an Open of the whole document would open a statement the user did not point at.
   @Test
-  fun `caret Open on a statement with no Open lens says so and sends nothing`() = run {
+  fun `caret Open on a statement with no Open lens says so and sends nothing`() = integrationTest {
     start()
     val editor = open("no-open.dynotable.sql")
     caret(editor, 0, 5)
@@ -571,7 +563,7 @@ class RunTest {
 
   // The lens range is for the text before the edit; there it selects another statement.
   @Test
-  fun `an edit while the Open lens request is pending opens nothing`() = run {
+  fun `an edit while the Open lens request is pending opens nothing`() = integrationTest {
     withoutCodeVision {
       h.fake.start()
       val editor = open("open-edited.dynotable.sql")
@@ -590,12 +582,12 @@ class RunTest {
 
   // `openInApp` answers `null`; a stopped client also gives `null`, and its pending requests never complete.
   @Test
-  fun `a session that drops after the Open lens answer shows the reason, never a success`() = run {
+  fun `a session that drops after the Open lens answer shows the reason, never a success`() = integrationTest {
     withoutCodeVision {
       h.fake.start()
       val editor = open("dropped.dynotable.sql")
       caret(editor, 1, 5)
-      connected()
+      h.connected()
       h.fake.handle("textDocument/codeLens") { params, session ->
         CompletableFuture<Any?>().also { answer ->
           thread {
@@ -616,7 +608,7 @@ class RunTest {
   }
 
   @Test
-  fun `profile-window-required on Open shows the server sentence once`() = run {
+  fun `profile-window-required on Open shows the server sentence once`() = integrationTest {
     h.fake.handle("textDocument/codeLens") { params, _ -> openLenses(params) }
     h.fake.handle("command:$OPEN_IN_APP") { _, _ -> throw h.fake.refusal("error-profile-window-required.json") }
     h.fake.start()
@@ -631,7 +623,7 @@ class RunTest {
   // A failed run with an empty message (seen with the database down) must still tell the user something,
   // and must leave the last result in view, not the running view.
   @Test
-  fun `a run refused with an empty message shows our general sentence and keeps the last view`() = run {
+  fun `a run refused with an empty message shows our general sentence and keeps the last view`() = integrationTest {
     h.fake.start()
     val editor = open("empty.partiql", "SELECT * FROM \"orders\"")
     runIn(editor)
@@ -646,7 +638,7 @@ class RunTest {
 
   // The server runs no PartiQL write; Stage opens the app on the same statement, or the whole document.
   @Test
-  fun `Stage sends openInApp with the refused run's range, or only its uri when the run had none`() = run {
+  fun `Stage sends openInApp with the refused run's range, or only its uri when the run had none`() = integrationTest {
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw h.fake.refusal("error-stage-in-app.json") }
     // No lens: a Run with no selection sends no range.
     h.fake.start()

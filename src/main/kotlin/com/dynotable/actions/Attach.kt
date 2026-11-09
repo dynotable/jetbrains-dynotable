@@ -1,6 +1,7 @@
 package com.dynotable.actions
 
 import com.dynotable.connect.Platform
+import com.dynotable.files.relativePath
 
 /**
  * The `sqlFiles` glob has no backslash escape. A one-character class matches the character literally;
@@ -19,8 +20,6 @@ private fun escapeGlob(path: String): String =
 fun attach(platform: Platform, baseDir: String?, file: String, sqlFiles: List<String>): List<String>? {
   if (baseDir == null) return null
   val slashes = { path: String -> if (platform == Platform.WINDOWS) path.replace('\\', '/') else path }
-  val prefix = slashes(baseDir).trimEnd('/') + "/"
-  val path = slashes(file)
-  if (!path.startsWith(prefix)) return null
-  return sqlFiles + escapeGlob(path.substring(prefix.length))
+  val path = relativePath(slashes(baseDir), slashes(file)) ?: return null
+  return sqlFiles + escapeGlob(path)
 }

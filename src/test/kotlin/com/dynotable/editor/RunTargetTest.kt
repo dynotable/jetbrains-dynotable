@@ -1,8 +1,8 @@
-package com.dynotable.run
+package com.dynotable.editor
 
 import com.dynotable.protocol.CommandArgs
-import com.dynotable.refusals.OPEN_IN_APP
-import com.dynotable.refusals.RUN_STATEMENT
+import com.dynotable.protocol.OPEN_IN_APP
+import com.dynotable.protocol.RUN_STATEMENT
 import com.google.gson.Gson
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Command

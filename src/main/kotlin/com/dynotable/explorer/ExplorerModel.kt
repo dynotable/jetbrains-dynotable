@@ -2,6 +2,7 @@ package com.dynotable.explorer
 
 import com.dynotable.protocol.ListIndicesResult
 import com.dynotable.protocol.ListTablesResult
+import com.dynotable.protocol.ProtocolException
 import com.dynotable.query.Dialect
 import com.dynotable.query.Opening
 import com.dynotable.query.Pin
@@ -10,12 +11,20 @@ import com.dynotable.query.Query
 import com.dynotable.query.Unpinnable
 import com.dynotable.query.directiveLine
 import com.dynotable.query.pinFor
+import com.dynotable.refusals.UNREADABLE
 
 /** One listing request's answer. A refusal keeps the server's sentence. */
 sealed interface Listing<out T> {
   data class Ok<T>(val value: T) : Listing<T>
 
   data class Failed(val message: String) : Listing<Nothing>
+}
+
+/** [parse] the answer, or a [Listing.Failed] that says why it cannot be read. */
+fun <T> listingOf(answer: Any?, parse: (Any?) -> T): Listing<T> = try {
+  Listing.Ok(parse(answer))
+} catch (_: ProtocolException) {
+  Listing.Failed(UNREADABLE)
 }
 
 sealed interface Node {

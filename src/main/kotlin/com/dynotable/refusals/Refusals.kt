@@ -1,12 +1,9 @@
 package com.dynotable.refusals
 
-import com.dynotable.connect.failureCode
+import com.dynotable.protocol.RUN_STATEMENT
+import com.dynotable.protocol.failureCode
 import com.dynotable.status.Action
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
-
-const val RUN_STATEMENT = "dynotable.runStatement"
-const val OPEN_IN_APP = "dynotable.openInApp"
-const val VALIDATE_QUERY = "dynotable.validateQuery"
 
 enum class RefusalAction(val label: String) {
   SELECT_PROFILE(Action.SELECT_PROFILE.label),

@@ -2,6 +2,7 @@ package com.dynotable.actions
 
 import com.dynotable.connect.Platform
 import com.dynotable.files.DynoTableSqlFileType
+import com.dynotable.files.isSql
 import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableProjectSettings
 import com.intellij.notification.NotificationType
@@ -26,7 +27,7 @@ class AttachSqlFileAction : DumbAwareAction() {
   override fun actionPerformed(e: AnActionEvent) {
     val project = e.project ?: return
     val file = e.getData(CommonDataKeys.EDITOR)?.virtualFile
-    if (file == null || !"sql".equals(file.extension, ignoreCase = true)) {
+    if (file == null || !file.isSql) {
       notify(project, OPEN_SQL_FILE, NotificationType.INFORMATION)
       return
     }

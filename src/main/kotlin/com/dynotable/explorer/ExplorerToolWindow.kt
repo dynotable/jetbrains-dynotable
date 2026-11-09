@@ -4,13 +4,12 @@ import com.dynotable.connect.ConnectCore
 import com.dynotable.connect.DynoTableServer
 import com.dynotable.editor.Answer
 import com.dynotable.editor.ServerCommands
-import com.dynotable.editor.UNREADABLE
 import com.dynotable.editor.Unanswered
 import com.dynotable.protocol.ListIndicesResult
 import com.dynotable.protocol.ListTablesResult
-import com.dynotable.protocol.ProtocolException
 import com.dynotable.query.NewQuery
 import com.dynotable.refusals.Failure
+import com.dynotable.refusals.NO_SENTENCE
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
 import com.google.gson.JsonElement
@@ -64,16 +63,11 @@ import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 
 const val EXPLORER_TOOL_WINDOW = "DynoTable"
+const val REFRESH_ACTION = "DynoTable.RefreshExplorer"
+const val NEW_QUERY_ACTION = "DynoTable.NewQuery"
 
 /** The explorer row that New Query acts on. */
 val EXPLORER_NODE: DataKey<Node> = DataKey.create("DynoTable.ExplorerNode")
-
-/** [parse] the answer, or a [Listing.Failed] that says why it cannot be read. */
-fun <T> listingOf(answer: Any?, parse: (Any?) -> T): Listing<T> = try {
-  Listing.Ok(parse(answer))
-} catch (_: ProtocolException) {
-  Listing.Failed(UNREADABLE)
-}
 
 /**
  * The current session's listings. Indices are fetched when the tree is first drawn. Tables never
@@ -158,7 +152,7 @@ class Explorer(private val project: Project, internal val cs: CoroutineScope) {
   private suspend fun <T> listing(client: LspClient, parse: (Any?) -> T, sender: (DynoTableServer) -> CompletableFuture<JsonElement>): Listing<T> =
     when (val reply = ServerCommands.getInstance(project).reply(client, sender)) {
       is Answer -> listingOf(reply.value, parse)
-      is Unanswered -> Listing.Failed((reply.failure as? Failure.Error)?.error?.message ?: Reason.CONNECTION_ENDED.sentence)
+      is Unanswered -> Listing.Failed((reply.failure as? Failure.Error)?.let { it.error.message.orEmpty().ifBlank { NO_SENTENCE } } ?: Reason.CONNECTION_ENDED.sentence)
     }
 
   private fun fresh() = JsonObject().apply { addProperty("fresh", true) }
@@ -266,9 +260,6 @@ private fun treeNode(node: Node): DefaultMutableTreeNode = DefaultMutableTreeNod
     else -> {}
   }
 }
-
-const val REFRESH_ACTION = "DynoTable.RefreshExplorer"
-const val NEW_QUERY_ACTION = "DynoTable.NewQuery"
 
 class RefreshExplorerAction : DumbAwareAction() {
   override fun getActionUpdateThread() = ActionUpdateThread.BGT

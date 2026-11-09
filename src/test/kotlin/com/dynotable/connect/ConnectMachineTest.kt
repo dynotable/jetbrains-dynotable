@@ -43,6 +43,9 @@ private class World(
 ) : ConnectSeams {
   var failNextStatus = false
 
+  /** The latest status the listeners heard. */
+  var heard: Status? = null
+
   /** Runs before each preflight answers. */
   var beforePreflight: suspend () -> Unit = {}
 
@@ -90,6 +93,7 @@ private class World(
     if (holdListings) CompletableDeferred<Reason?>().also { heldListings[attempt] = it }.await() else listing
 
   override fun onStatus(status: Status) {
+    heard = status
     if (failNextStatus) {
       failNextStatus = false
       error("paint failed")
@@ -304,6 +308,18 @@ class ConnectMachineTest {
     runCurrent()
     assertEquals(Status.Connected(1), machine.status)
     assertEquals(1, world.preflights)
+  }
+
+  // A close stops the restart before its new start; the widget and the explorer must not keep showing a start.
+  @Test
+  fun `a restart after a close tells the listeners that nothing serves`() = runTest {
+    val world = World()
+    val machine = machine(world)
+    connect(world, machine)
+    machine.close()
+    machine.restart()
+    assertEquals(Status.Hidden, machine.status)
+    assertEquals(Status.Hidden, world.heard)
   }
 
   // A test teardown or a project close stops the listed clients next; an attempt still waiting then works during that stop.

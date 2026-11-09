@@ -160,7 +160,7 @@ class Launcher(
   }
 
   private fun fresh(stale: PortFile?): PortFile? =
-    readPortFile()?.takeIf { stale == null || it.port != stale.port || it.token != stale.token }
+    readPortFile()?.takeIf { it.key != stale?.key }
 
   /** `null` when the OS cannot start it. */
   private fun start(command: List<String>): Process? {

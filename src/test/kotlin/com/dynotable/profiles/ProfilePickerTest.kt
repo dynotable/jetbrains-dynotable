@@ -3,9 +3,11 @@ package com.dynotable.profiles
 import com.dynotable.editor.ServerCommands
 import com.dynotable.harness.PopupRow
 import com.dynotable.harness.harnessFixture
+import com.dynotable.harness.integrationTest
 import com.dynotable.harness.waitFor
-import com.dynotable.refusals.RUN_STATEMENT
+import com.dynotable.protocol.RUN_STATEMENT
 import com.dynotable.settings.DynoTableWorkspaceSettings
+import com.dynotable.settings.RequestedProfile
 import com.dynotable.status.Action
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
@@ -17,7 +19,6 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.testFramework.junit5.codeInsight.fixture.codeInsightFixture
-import com.intellij.testFramework.common.timeoutRunBlocking
 import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
@@ -31,7 +32,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
-import kotlin.time.Duration.Companion.minutes
 
 /** The profile picker and the requested profile, against the fake server. */
 @TestApplication
@@ -46,42 +46,35 @@ class ProfilePickerTest {
   private val stored get() = DynoTableWorkspaceSettings.getInstance(project.get())
   private val picker get() = ProfilePicker.getInstance(project.get())
 
-  private fun run(test: suspend () -> Unit) = timeoutRunBlocking(2.minutes) { test() }
-
   private suspend fun open(name: String = "q.dynotable.sql"): VirtualFile =
     withContext(Dispatchers.EDT) { fixture.configureByText(name, "SELECT * FROM \"orders\"").virtualFile }
-
-  private suspend fun connected(): Int {
-    waitFor("connected, now ${h.core.status}") { h.core.status is Status.Connected }
-    return (h.core.status as Status.Connected).attempt
-  }
 
   /** The profile the latest platform session asked for. The preflight always sends none. */
   private fun requested(): String? =
     h.fake.initializeParams.last().asJsonObject["initializationOptions"].asJsonObject["profile"]?.asString
 
   @Test
-  fun `the first connection sends the stored id`() = run {
+  fun `the first connection sends the stored id`() = integrationTest {
     stored.profile = STORED
     h.fake.start()
     open()
-    connected()
+    h.connected()
     assertEquals(STORED.id, requested())
   }
 
   // The server does not confirm the binding, so the status bar must not claim one. A profile name is the user's text.
   @Test
-  fun `choosing a profile connects anew with its id, and the status bar shows it as requested`() = run {
+  fun `choosing a profile connects anew with its id, and the status bar shows it as requested`() = integrationTest {
     val roster = h.fake.fixture("list-profiles.json").asJsonArray
     roster[1].asJsonObject.addProperty("name", "<b>p2</b>")
     h.fake.handle("dynotable/listProfiles") { _, _ -> roster }
     h.fake.start()
     open()
-    val before = connected()
+    val before = h.connected()
     val sessions = h.fake.platformSessions()
     h.popupAnswer = "<b>p2</b>"
     picker.select()
-    assertEquals(before + 1, connected())
+    assertEquals(before + 1, h.connected())
     assertEquals(sessions + 1, h.fake.platformSessions())
     assertEquals("profile-2-id", requested())
     assertEquals(RequestedProfile("profile-2-id", "<b>p2</b>"), stored.profile)
@@ -92,11 +85,11 @@ class ProfilePickerTest {
 
   // The server would refuse the profile at initialize; the session must not end for that.
   @Test
-  fun `an incomplete profile shows its reason and cannot be chosen`() = run {
+  fun `an incomplete profile shows its reason and cannot be chosen`() = integrationTest {
     h.fake.handle("dynotable/listProfiles") { _, _ -> h.fake.fixture("list-profiles-incomplete.json") }
     h.fake.start()
     open()
-    connected()
+    h.connected()
     val sessions = h.fake.platformSessions()
     h.popupAnswer = "profile-3-name"
     picker.select()
@@ -109,11 +102,11 @@ class ProfilePickerTest {
 
   // The roster came from the replaced session, maybe from another app.
   @Test
-  fun `a choice made while the session changes is not stored`() = run {
+  fun `a choice made while the session changes is not stored`() = integrationTest {
     stored.profile = STORED
     h.fake.start()
     open()
-    val attempt = connected()
+    val attempt = h.connected()
     val sessions = h.fake.platformSessions()
     h.popupAnswer = CHOSEN.name
     h.duringPopup = {
@@ -121,7 +114,7 @@ class ProfilePickerTest {
       runBlocking { waitFor("the session to change") { h.core.status != Status.Connected(attempt) } }
     }
     picker.select()
-    connected()
+    h.connected()
     delay(500)
     assertEquals(STORED, stored.profile)
     // One for the reconnect only.
@@ -130,11 +123,11 @@ class ProfilePickerTest {
   }
 
   @Test
-  fun `an empty roster offers Open DynoTable`() = run {
+  fun `an empty roster offers Open DynoTable`() = integrationTest {
     h.fake.handle("dynotable/listProfiles") { _, _ -> JsonArray() }
     h.fake.start()
     open()
-    connected()
+    h.connected()
     picker.select()
     val sentence = "DynoTable has no profiles. Create a profile in DynoTable."
     assertEquals(listOf(sentence), h.sentences())
@@ -145,7 +138,7 @@ class ProfilePickerTest {
   }
 
   @Test
-  fun `an unbound Run lens click opens the picker`() = run {
+  fun `an unbound Run lens click opens the picker`() = integrationTest {
     val refusal = h.fake.fixture("error-profile-required.json").asJsonObject["message"].asString
     h.fake.handle("dynotable/listTables") { _, _ -> throw h.fake.refusal("error-profile-required.json") }
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw h.fake.refusal("error-profile-required.json") }

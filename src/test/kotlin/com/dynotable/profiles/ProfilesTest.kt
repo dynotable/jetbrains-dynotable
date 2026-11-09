@@ -36,8 +36,8 @@ class ProfilesTest {
   // A profile name is the user's text; the popup's label would render it as HTML.
   @Test
   fun `a name that starts with html shows as text`() {
-    assertEquals("​<html><img src=x>", item(row(name = "<html><img src=x>")).text)
+    assertEquals("\u200B<html><img src=x>", item(row(name = "<html><img src=x>")).text)
     // Swing reads the tag in any case.
-    assertEquals("​<HtMl><img src=x>", item(row(name = "<HtMl><img src=x>")).text)
+    assertEquals("\u200B<HtMl><img src=x>", item(row(name = "<HtMl><img src=x>")).text)
   }
 }

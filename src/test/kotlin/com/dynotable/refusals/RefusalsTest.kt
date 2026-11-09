@@ -1,5 +1,7 @@
 package com.dynotable.refusals
 
+import com.dynotable.protocol.OPEN_IN_APP
+import com.dynotable.protocol.RUN_STATEMENT
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError

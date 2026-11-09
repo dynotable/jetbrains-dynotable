@@ -1,7 +1,6 @@
 package com.dynotable.settings
 
 import com.dynotable.connect.ConnectCore
-import com.dynotable.profiles.RequestedProfile
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.BaseState
@@ -92,6 +91,9 @@ class DynoTableProjectSettings(private val project: Project) : SimplePersistentS
     fun getInstance(project: Project): DynoTableProjectSettings = project.service()
   }
 }
+
+/** The id goes on the wire; the name is for display only. */
+data class RequestedProfile(val id: String, val name: String)
 
 /**
  * The requested profile, in `workspace.xml`: a profile id names a profile of this computer's app, so a

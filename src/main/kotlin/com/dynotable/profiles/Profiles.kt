@@ -7,9 +7,6 @@ const val EMPTY_ROSTER = "DynoTable has no profiles. Create a profile in DynoTab
 const val INCOMPLETE = "This profile is incomplete. Finish setting it up in DynoTable."
 const val NOT_BINDABLE = "DynoTable cannot use this profile. Check it in DynoTable."
 
-/** The id goes on the wire; the name is for display only. */
-data class RequestedProfile(val id: String, val name: String)
-
 /**
  * A popup row: [text] the name, [detail] the slug, the engines and the refusal. [refusal]: why the
  * row cannot be chosen; the server's `reason` is a code, not a sentence.

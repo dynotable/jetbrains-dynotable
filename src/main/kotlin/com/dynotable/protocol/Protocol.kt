@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import java.math.BigDecimal
 import kotlin.math.abs
 
@@ -18,12 +19,24 @@ import kotlin.math.abs
  * `strict = true` refuses both: the contract fixtures use it to see drift first.
  */
 
+const val RUN_STATEMENT = "dynotable.runStatement"
+const val OPEN_IN_APP = "dynotable.openInApp"
+const val LIST_PROFILES = "dynotable/listProfiles"
+const val LIST_TABLES = "dynotable/listTables"
+const val LIST_INDICES = "dynotable/listIndices"
+
+const val AUTH_FAILED_CODE = -32898
+const val REFUSED_CODE = -32803
+const val METHOD_NOT_FOUND_CODE = -32601
+
 /** The value does not have the shape the protocol gives. The message names the path. */
 class ProtocolException(message: String) : RuntimeException(message)
 
 data class PortFile(val port: Int, val token: String, val pid: Long?) {
   // A data class prints its fields; the token must never reach a log through toString.
   override fun toString() = "PortFile(port=$port, pid=$pid)"
+
+  val key: Pair<Int, String> get() = port to token
 
   companion object {
     fun from(value: Any?, strict: Boolean = false): PortFile = read(value, strict) {
@@ -184,6 +197,17 @@ data class FailureData(
     fun from(value: Any?, strict: Boolean = false): FailureData = read(value, strict) {
       FailureData(required("code", oneOf(strict, *CODES)))
     }
+  }
+}
+
+/** The `data.code` of a `-32803` refusal, or `null` when `data` has no readable code. */
+fun failureCode(error: ResponseError): String? = if (error.code != REFUSED_CODE) {
+  null
+} else {
+  try {
+    FailureData.from(error.data).code
+  } catch (_: ProtocolException) {
+    null
   }
 }
 

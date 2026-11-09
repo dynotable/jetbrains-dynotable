@@ -9,6 +9,8 @@ import com.intellij.openapi.util.text.StringUtil
 /** For a server error with no message: the platform refuses a notification with no text. */
 const val NO_SENTENCE = "DynoTable could not complete the request."
 
+const val UNREADABLE = "DynoTable answered with a result the plugin cannot read."
+
 /** A plugin notification. The balloon renders HTML, so [text] (often the server's) is escaped. */
 fun notify(project: Project, text: String, type: NotificationType, actions: List<Pair<String, () -> Unit>> = emptyList()) {
   val notification = NotificationGroupManager.getInstance().getNotificationGroup("DynoTable")

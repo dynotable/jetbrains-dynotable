@@ -10,7 +10,7 @@ import com.intellij.openapi.vfs.VirtualFile
 /** A `.sql` file is DynoTable SQL when a `sqlFiles` pattern of an open project whose content holds it matches. */
 class SqlFilesOverrider : FileTypeOverrider {
   override fun getOverriddenFileType(file: VirtualFile): FileType? {
-    if (file.isDirectory || !"sql".equals(file.extension, ignoreCase = true)) return null
+    if (file.isDirectory || !file.isSql) return null
     val projects = ProjectManager.getInstanceIfCreated()?.openProjects ?: return null
     val served = projects.any { project ->
       val baseDir = project.basePath

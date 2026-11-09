@@ -16,7 +16,7 @@ import com.dynotable.query.NewQuery
 import com.dynotable.results.Results
 import com.dynotable.results.View
 import com.dynotable.settings.DynoTableWorkspaceSettings
-import com.dynotable.profiles.RequestedProfile
+import com.dynotable.settings.RequestedProfile
 import com.dynotable.status.Action
 import com.dynotable.status.Status
 import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
@@ -347,7 +347,7 @@ class LiveTest {
   @Test
   fun `a PartiQL run cancelled at once shows the cancelled view and no notification`() = run { cancelAtOnce("cancel.partiql") }
 
-  // The plugin applies the server's edit itself (Decision 4); the real server's edit form must pass its checks.
+  // The plugin applies the server's edit itself; the real server's edit form must pass its checks.
   @Test
   fun `the PartiQL quick fix Use brackets turns IN ('a') into square brackets`() = run {
     val text = "SELECT * FROM \"$ORDERS\" WHERE \"status\" IN ('a')"

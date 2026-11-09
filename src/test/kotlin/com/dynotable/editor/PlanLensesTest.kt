@@ -1,6 +1,6 @@
 package com.dynotable.editor
 
-import com.dynotable.refusals.RUN_STATEMENT
+import com.dynotable.protocol.RUN_STATEMENT
 import com.google.gson.Gson
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Command

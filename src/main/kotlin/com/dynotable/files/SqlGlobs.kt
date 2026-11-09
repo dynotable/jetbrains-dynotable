@@ -1,6 +1,16 @@
 package com.dynotable.files
 
+import com.intellij.openapi.vfs.VirtualFile
 import java.util.concurrent.ConcurrentHashMap
+
+/** The candidates for `sqlFiles`: a file with the `.sql` extension, in any case. */
+val VirtualFile.isSql: Boolean get() = "sql".equals(extension, ignoreCase = true)
+
+/** [file]'s path relative to [baseDir]; `null` when [baseDir] does not hold it. Both use `/`. */
+fun relativePath(baseDir: String, file: String): String? {
+  val prefix = baseDir.trimEnd('/') + "/"
+  return if (file.startsWith(prefix)) file.substring(prefix.length) else null
+}
 
 /**
  * The `sqlFiles` glob match, with the VS Code glob rules: `*` and `?` stay in one path segment, a
@@ -23,9 +33,7 @@ object SqlGlobs {
    * A pattern with a class that is not valid (as `[z-a]`) matches nothing.
    */
   fun matches(patterns: List<String>, baseDir: String, file: String): Boolean {
-    val prefix = baseDir.trimEnd('/') + "/"
-    if (!file.startsWith(prefix)) return false
-    val relative = file.substring(prefix.length)
+    val relative = relativePath(baseDir, file) ?: return false
     return patterns.any { compile(it).matches(relative) }
   }
 

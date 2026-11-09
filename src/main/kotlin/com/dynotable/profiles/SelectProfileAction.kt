@@ -2,11 +2,13 @@ package com.dynotable.profiles
 
 import com.dynotable.connect.ConnectCore
 import com.dynotable.editor.ServerCommands
-import com.dynotable.editor.UNREADABLE
+import com.dynotable.protocol.LIST_PROFILES
 import com.dynotable.protocol.ProfileRow
 import com.dynotable.protocol.ProtocolException
+import com.dynotable.refusals.UNREADABLE
 import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableWorkspaceSettings
+import com.dynotable.settings.RequestedProfile
 import com.dynotable.status.Action
 import com.dynotable.ui.choose
 import com.intellij.notification.NotificationType
@@ -65,8 +67,6 @@ class ProfilePicker(private val project: Project, private val cs: CoroutineScope
   }
 
   companion object {
-    private const val LIST_PROFILES = "dynotable/listProfiles"
-
     fun getInstance(project: Project): ProfilePicker = project.service()
   }
 }

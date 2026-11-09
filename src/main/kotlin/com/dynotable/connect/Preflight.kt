@@ -1,8 +1,8 @@
 package com.dynotable.connect
 
-import com.dynotable.protocol.FailureData
+import com.dynotable.protocol.AUTH_FAILED_CODE
 import com.dynotable.protocol.PortFile
-import com.dynotable.protocol.ProtocolException
+import com.dynotable.protocol.failureCode
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -15,7 +15,6 @@ import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.ShowMessageRequestParams
 import org.eclipse.lsp4j.jsonrpc.Launcher
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.eclipse.lsp4j.services.LanguageClient
 import org.eclipse.lsp4j.services.LanguageServer
 import java.io.IOException
@@ -27,21 +26,6 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-
-const val AUTH_FAILED_CODE = -32898
-const val REFUSED_CODE = -32803
-const val METHOD_NOT_FOUND_CODE = -32601
-
-/** The `data.code` of a `-32803` refusal, or `null` when `data` has no readable code. */
-fun failureCode(error: ResponseError): String? = if (error.code != REFUSED_CODE) {
-  null
-} else {
-  try {
-    FailureData.from(error.data).code
-  } catch (_: ProtocolException) {
-    null
-  }
-}
 
 /** The server sends nothing the preflight needs. */
 private object Silent : LanguageClient {

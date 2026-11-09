@@ -3,8 +3,8 @@ package com.dynotable.editor
 import com.dynotable.files.PartiQLLanguage
 import com.dynotable.harness.awaitHighlighting
 import com.dynotable.harness.harnessFixture
+import com.dynotable.harness.integrationTest
 import com.dynotable.harness.waitFor
-import com.dynotable.refusals.VALIDATE_QUERY
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
 import com.google.gson.JsonObject
@@ -15,7 +15,6 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.testFramework.junit5.codeInsight.fixture.codeInsightFixture
-import com.intellij.testFramework.common.timeoutRunBlocking
 import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
@@ -53,7 +52,6 @@ import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
 import java.util.concurrent.TimeUnit
 import kotlin.system.measureTimeMillis
-import kotlin.time.Duration.Companion.minutes
 
 /** Server commands, their refusals and the server's requests, against the fake server. */
 @TestApplication
@@ -70,16 +68,12 @@ class CommandsTest {
   private suspend fun open(name: String, text: String = "SELECT * FROM t"): VirtualFile =
     withContext(Dispatchers.EDT) { fixture.configureByText(name, text).virtualFile }
 
-  private suspend fun connected() = waitFor("connected, now ${h.core.status}") { h.core.status is Status.Connected }
-
   private fun args(file: VirtualFile) = listOf(JsonObject().apply { addProperty("uri", file.url) })
-
-  private fun run(test: suspend () -> Unit) = timeoutRunBlocking(2.minutes) { test() }
 
   // The server sends the sentence as window/showMessage too; the plugin adds nothing. A command that
   // meets a start in flight must wait for it, not say "try again".
   @Test
-  fun `Validate during a cold start waits and then answers, with exactly one notification`() = run {
+  fun `Validate during a cold start waits and then answers, with exactly one notification`() = integrationTest {
     h.fake.initializeDelayMs = 1500
     h.fake.start()
     val file = open("q.opensearch", "// dynotable: index=orders\n{}")
@@ -93,11 +87,11 @@ class CommandsTest {
 
   // Only the connect-time listing latches missing-request.
   @Test
-  fun `-32601 on a command shows the server's message with no action and keeps the session`() = run {
+  fun `-32601 on a command shows the server's message with no action and keeps the session`() = integrationTest {
     h.fake.handle("command:$VALIDATE_QUERY") { _, _ -> throw ResponseErrorException(ResponseError(-32601, "Unknown command", null)) }
     h.fake.start()
     val file = open("q.opensearch", "{}")
-    connected()
+    h.connected()
     assertNull(commands.send(file, VALIDATE_QUERY, args(file)))
     val shown = h.notifications.single()
     assertEquals("Unknown command", shown.content)
@@ -109,14 +103,14 @@ class CommandsTest {
 
   // The balloon renders HTML: a hostile server string could load an image from anywhere.
   @Test
-  fun `a refusal message and a server showMessage show as plain text`() = run {
+  fun `a refusal message and a server showMessage show as plain text`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("command:$VALIDATE_QUERY") { _, _ ->
       throw ResponseErrorException(ResponseError(-32803, hostile, JsonObject().apply { addProperty("code", "run-failed") }))
     }
     h.fake.start()
     val file = open("q.opensearch", "{}")
-    connected()
+    h.connected()
     commands.send(file, VALIDATE_QUERY, args(file))
     h.fake.notifyAll("window/showMessage", MessageParams(MessageType.Error, hostile))
     waitFor("two notifications") { h.notifications.size == 2 }
@@ -128,11 +122,11 @@ class CommandsTest {
 
   // The balloon renders HTML, and its action labels render a text that starts with <html> as HTML.
   @Test
-  fun `a server showMessageRequest shows its text and its action title as plain text, and answers the server's own title`() = run {
+  fun `a server showMessageRequest shows its text and its action title as plain text, and answers the server's own title`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.start()
     open("q.partiql")
-    connected()
+    h.connected()
     waitFor("one open session") { h.fake.sessions.count { it.initialized } == 1 }
     val params = ShowMessageRequestParams(listOf(MessageActionItem(hostile))).apply {
       type = MessageType.Info
@@ -150,10 +144,10 @@ class CommandsTest {
 
   // The server sends none of these; a listener on a stale port could.
   @Test
-  fun `the server's applyEdit, registerCapability, showDocument and configuration are refused`() = run {
+  fun `the server's applyEdit, registerCapability, showDocument and configuration are refused`() = integrationTest {
     h.fake.start()
     val file = open("squat.partiql", "SELECT 1")
-    connected()
+    h.connected()
     waitFor("didOpen") { h.fake.opened(file.url) }
     val range = Range(Position(0, 0), Position(0, 8))
     val answers = withContext(Dispatchers.IO) {
@@ -170,15 +164,15 @@ class CommandsTest {
     assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 
-  // Decision 6: a closed file cannot be open on the server; for an open one the server's own refusal
+  // A closed file cannot be open on the server; for an open one the server's own refusal
   // says what is wrong, after a short wait for its diagnostics.
   @Test
-  fun `a closed file shows our sentence and sends nothing, and an open file the server never opened gets its refusal`() = run {
+  fun `a closed file shows our sentence and sends nothing, and an open file the server never opened gets its refusal`() = integrationTest {
     h.fake.ignoreOpens = true
     h.fake.start()
     val closed = open("closed.opensearch", "{}")
     val file = open("q.opensearch", "{}")
-    connected()
+    h.connected()
     withContext(Dispatchers.EDT) { FileEditorManager.getInstance(project.get()).closeFile(closed) }
     assertNull(commands.send(closed, VALIDATE_QUERY, args(closed)))
     assertEquals(listOf(NOT_OPENED), h.sentences())
@@ -190,7 +184,7 @@ class CommandsTest {
   }
 
   @Test
-  fun `a command in an untrusted project shows the untrusted sentence once and starts nothing`() = run {
+  fun `a command in an untrusted project shows the untrusted sentence once and starts nothing`() = integrationTest {
     val property = "idea.trust.headless.disabled"
     val old = System.setProperty(property, "false")
     try {
@@ -217,7 +211,7 @@ class CommandsTest {
    * file; answers the quick fixes the editor shows.
    */
   private suspend fun quickFixes(file: VirtualFile, actions: (uri: String) -> List<CodeAction>): List<com.intellij.codeInsight.intention.IntentionAction> {
-    connected()
+    h.connected()
     waitFor("didOpen of the scratch file") { h.fake.openedUri(file.name) != null }
     val uri = h.fake.openedUri(file.name)!!
     h.fake.handle("textDocument/codeAction") { _, _ -> actions(uri) }
@@ -232,9 +226,9 @@ class CommandsTest {
     block()
   }
 
-  // Decision 4. An edit of another file would apply only in part, so that fix is not offered.
+  // The plugin applies the server's fix itself. An edit of another file would apply only in part, so that fix is not offered.
   @Test
-  fun `in a scratch file the server's fix shows and applies, and a fix that also edits another file is not offered`() = run {
+  fun `in a scratch file the server's fix shows and applies, and a fix that also edits another file is not offered`() = integrationTest {
     h.fake.start()
     val file = scratch("SELEC 1")
     val first = Range(Position(0, 0), Position(0, 5))
@@ -250,9 +244,9 @@ class CommandsTest {
     assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 
-  // Decision 4: a versioned edit applies only to the version the server saw; a file operation or a snippet cannot apply here.
+  // A versioned edit applies only to the version the server saw; a file operation or a snippet cannot apply here.
   @Test
-  fun `a versioned fix of the current version applies, and a stale version, a file operation or a snippet is not offered`() = run {
+  fun `a versioned fix of the current version applies, and a stale version, a file operation or a snippet is not offered`() = integrationTest {
     h.fake.start()
     val file = scratch("SELEC 1")
     val first = Range(Position(0, 0), Position(0, 5))
@@ -274,7 +268,7 @@ class CommandsTest {
 
   // A server may send one edit in both forms; applying both would insert the text twice.
   @Test
-  fun `a fix that sends its edit as both changes and documentChanges applies it once`() = run {
+  fun `a fix that sends its edit as both changes and documentChanges applies it once`() = integrationTest {
     h.fake.start()
     val file = scratch("SELEC 1")
     val first = Range(Position(0, 0), Position(0, 5))
@@ -291,7 +285,7 @@ class CommandsTest {
   }
 
   @Test
-  fun `a profile-required refusal of a quick fix's command shows its sentence with Select Profile`() = run {
+  fun `a profile-required refusal of a quick fix's command shows its sentence with Select Profile`() = integrationTest {
     val refusal = h.fake.fixture("error-profile-required.json").asJsonObject
     h.fake.handle("command:$VALIDATE_QUERY") { _, _ -> throw h.fake.refusal("error-profile-required.json") }
     h.fake.start()
@@ -302,5 +296,9 @@ class CommandsTest {
     val shown = h.notifications.single()
     assertEquals(StringUtil.escapeXmlEntities(refusal["message"].asString), shown.content)
     assertEquals(listOf("Select Profile"), shown.actions.map { it.templateText })
+  }
+
+  private companion object {
+    const val VALIDATE_QUERY = "dynotable.validateQuery"
   }
 }

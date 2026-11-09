@@ -35,11 +35,13 @@ import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.junit5.fixture.TestFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.testFramework.junit5.fixture.testFixture
+import com.intellij.testFramework.common.timeoutRunBlocking
 import com.intellij.testFramework.runInEdtAndGet
 import com.intellij.ui.UiInterceptors
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBList
 import com.intellij.util.ui.UIUtil
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -48,6 +50,7 @@ import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
+import kotlin.time.Duration.Companion.minutes
 
 /** A row of a list popup, as the user sees it. [detail]: its grey secondary text. */
 data class PopupRow(val text: String, val selectable: Boolean, val detail: String? = null)
@@ -145,6 +148,12 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
     waitFor("status $expected, now ${core.status}", ms) { core.status == expected }
   }
 
+  /** Waits for a connected session; its attempt. */
+  suspend fun connected(): Int {
+    waitFor("connected, now ${core.status}") { core.status is Status.Connected }
+    return (core.status as Status.Connected).attempt
+  }
+
   /** The sentences of the notifications posted so far, the platform's too. */
   fun sentences(): List<String> = notifications.map { it.content }
 
@@ -198,6 +207,9 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
     }
   }
 }
+
+/** An integration test's body, with a deadline. */
+fun integrationTest(test: suspend CoroutineScope.() -> Unit) = timeoutRunBlocking(2.minutes) { test() }
 
 /** Polls [condition] every 50 ms; fails after [ms]. */
 suspend fun waitFor(what: String, ms: Long = 15_000, condition: suspend () -> Boolean) {

@@ -31,7 +31,7 @@ class DynoTableQuickFix(client: LspClient, private val action: CodeAction) : Lsp
     if (!FileModificationService.getInstance().prepareVirtualFilesForWrite(project, listOf(file))) return
     if (edits.isNotEmpty()) WriteAction.run<Throwable> { applyTextEdits(editor.document, edits) }
     val command = action.command ?: return
-    DynoTableCommands().executeCommand(lspClient, file, command)
+    DynoTableCommands.executeCommand(lspClient, file, command)
   }
 
   override fun generatePreview(project: Project, editor: Editor, psiFile: PsiFile): IntentionPreviewInfo {

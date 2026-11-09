@@ -12,6 +12,7 @@ import com.intellij.codeInsight.codeVision.CodeVisionHost.LensInvalidateSignal
 import com.intellij.codeInsight.codeVision.ui.model.TextCodeVisionEntry
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
@@ -23,12 +24,14 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.util.getLsp4jRange
 import com.intellij.platform.lsp.util.getRangeInDocument
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
+import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.InlayHintParams
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
@@ -69,8 +72,8 @@ class PlanCodeVisionProvider : CodeVisionProvider<Unit>, DumbAware {
       editor.getUserData(FETCH)?.takeIf { it.stamp == stamp && it.session == session }
         ?: Fetch(stamp, session).also { next ->
           editor.getUserData(FETCH)?.job?.cancel()
-          next.job = core.cs.launch {
-            next.plans = plans(core, file, document)
+          next.job = project.service<PlanFetches>().cs.launch {
+            next.plans = plans(project, core, file, document)
             ApplicationManager.getApplication().invokeLater({ refresh(project) }, project.disposed)
           }
           editor.putUserData(FETCH, next)
@@ -86,23 +89,18 @@ class PlanCodeVisionProvider : CodeVisionProvider<Unit>, DumbAware {
   }
 
   /** Both requests go out together. A failed or unreadable request shows no plan: the plan is a hint only. */
-  private suspend fun plans(core: ConnectCore, file: VirtualFile, document: Document): List<PlanLens> {
+  private suspend fun plans(project: Project, core: ConnectCore, file: VirtualFile, document: Document): List<PlanLens> {
     val client = core.serving() ?: return emptyList()
     if (!core.awaitServerOpened(file)) return emptyList()
     val uri = client.getDocumentIdentifier(file).uri
     val whole = readAction { getLsp4jRange(document, 0, document.textLength) }
-    return try {
-      core.machine.trackRun(holdsRestart = false) {
-        coroutineScope {
-          val hints = async { client.sendRequest { it.textDocumentService.inlayHint(InlayHintParams(TextDocumentIdentifier(uri), whole)) } }
-          val lenses = async { client.sendRequest { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) } }
-          planLenses(lenses.await().orEmpty(), hints.await().orEmpty())
-        }
-      }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (_: Exception) {
-      emptyList()
+    val commands = ServerCommands.getInstance(project)
+    return coroutineScope {
+      val hints = async { commands.reply(client) { it.textDocumentService.inlayHint(InlayHintParams(TextDocumentIdentifier(uri), whole)) } }
+      val lenses = async { commands.reply(client) { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) } }
+      val hintAnswer = hints.await() as? Answer ?: return@coroutineScope emptyList()
+      val lensAnswer = lenses.await() as? Answer ?: return@coroutineScope emptyList()
+      planLenses((lensAnswer.value as? List<*>).orEmpty().filterIsInstance<CodeLens>(), (hintAnswer.value as? List<*>).orEmpty().filterIsInstance<InlayHint>())
     }
   }
 
@@ -125,3 +123,7 @@ class PlanCodeVisionProvider : CodeVisionProvider<Unit>, DumbAware {
     }
   }
 }
+
+/** The plan fetches of the project's editors: they end with the project. */
+@Service(Service.Level.PROJECT)
+class PlanFetches(val cs: CoroutineScope)

@@ -6,18 +6,17 @@ import com.dynotable.connect.SessionEnded
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.protocol.CommandArgs
+import com.dynotable.protocol.OPEN_IN_APP
+import com.dynotable.protocol.RUN_STATEMENT
 import com.dynotable.refusals.Failure
-import com.dynotable.refusals.OPEN_IN_APP
-import com.dynotable.refusals.RUN_STATEMENT
 import com.dynotable.refusals.Refusal
 import com.dynotable.refusals.RefusalAction
+import com.dynotable.refusals.UNREADABLE
 import com.dynotable.refusals.notify
 import com.dynotable.refusals.refusalOf
 import com.dynotable.results.BUSY
 import com.dynotable.results.Results
 import com.dynotable.results.RunOutcome
-import com.dynotable.run.RunRequest
-import com.dynotable.run.lensArgAt
 import com.dynotable.status.Action
 import com.dynotable.status.Status
 import com.google.gson.Gson
@@ -50,12 +49,11 @@ const val NOT_OPENED = "DynoTable has not opened this file. Close and open the f
 const val CHANGED = "The query changed before the run started. Run it again."
 const val OPEN_CHANGED = "The query changed before DynoTable opened it. Try again."
 const val NO_OPEN = "DynoTable cannot open this statement. Put the cursor in a statement that shows Open in DynoTable."
-const val UNREADABLE = "DynoTable answered with a result the plugin cannot read."
 private const val CODE_LENS = "textDocument/codeLens"
 private val gson = Gson()
 
 /** The platform sends a command as a notification, so its answer and its refusal would be lost. */
-class DynoTableCommands : LspCommandsSupport() {
+object DynoTableCommands : LspCommandsSupport() {
   override fun executeCommand(lspClient: LspClient, contextFile: VirtualFile, command: Command) {
     if (command.command.startsWith("dynotable.")) {
       ServerCommands.getInstance(lspClient.project).launch(contextFile, command.command, command.arguments.orEmpty())

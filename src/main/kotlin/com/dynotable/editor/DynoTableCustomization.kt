@@ -8,7 +8,7 @@ import org.eclipse.lsp4j.CodeAction
 
 class DynoTableCustomization : LspCustomization() {
   // A lens click goes through the commands customizer: Run and Open take the same paths as the actions.
-  override val commandsCustomizer = DynoTableCommands()
+  override val commandsCustomizer = DynoTableCommands
 
   // The plan shows in the lens row instead (PlanCodeVisionProvider).
   override val inlayHintCustomizer = LspInlayHintDisabled

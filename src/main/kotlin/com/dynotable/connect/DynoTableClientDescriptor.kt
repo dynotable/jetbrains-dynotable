@@ -3,6 +3,7 @@ package com.dynotable.connect
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.files.PartiQLFileType
+import com.dynotable.editor.DynoTableCustomization
 import com.dynotable.protocol.PortFile
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
@@ -15,7 +16,6 @@ import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
 import org.eclipse.lsp4j.InitializeResult
-import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageServer
 import java.util.concurrent.CompletableFuture
@@ -64,17 +64,9 @@ class DynoTableClientDescriptor(
 
   override val lspServerListener = listener
 
-  override fun createLsp4jClient(handler: LspServerNotificationsHandler) = Lsp4jClient(Recording(handler, published))
+  override fun createLsp4jClient(handler: LspServerNotificationsHandler) = Lsp4jClient(ServerHandler(handler, published))
 
-  private class Recording(
-    private val next: LspServerNotificationsHandler,
-    private val published: MutableSet<String>,
-  ) : LspServerNotificationsHandler by next {
-    override fun publishDiagnostics(params: PublishDiagnosticsParams) {
-      published += params.uri
-      next.publishDiagnostics(params)
-    }
-  }
+  override val lspCustomization = DynoTableCustomization()
 }
 
 /** Forwards the platform's events for one attempt. They arrive on the "LSP Listener" thread and must not block. */

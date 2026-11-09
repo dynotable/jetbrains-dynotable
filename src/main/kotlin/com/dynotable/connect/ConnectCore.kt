@@ -2,6 +2,7 @@ package com.dynotable.connect
 
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.protocol.PortFile
+import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableAppSettings
 import com.dynotable.settings.DynoTableConfigurable
 import com.dynotable.status.Action
@@ -11,8 +12,6 @@ import com.dynotable.ui.StatusWidget
 import com.google.gson.JsonObject
 import com.intellij.ide.trustedProjects.TrustedProjects
 import com.intellij.ide.trustedProjects.TrustedProjectsListener
-import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -33,7 +32,6 @@ import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectCloseListener
 import com.intellij.openapi.startup.ProjectActivity
-import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.platform.lsp.api.LspClient
@@ -157,7 +155,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
       is Status.Connected -> return clientOf(status.attempt)
       is Status.Unbound -> return clientOf(status.attempt)
       is Status.Disconnected -> if (!status.reason.latched || (before as? Status.Disconnected)?.reason?.latched == true) notify(status.reason)
-      else -> info("DynoTable is reconnecting. Try again shortly.")
+      else -> notify(project, "DynoTable is reconnecting. Try again shortly.", NotificationType.INFORMATION)
     }
     return null
   }
@@ -198,7 +196,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
   fun perform(action: Action) {
     when (action) {
       Action.RECONNECT -> cs.launch { machine.restart() }
-      Action.OPEN_APP -> cs.launch(Dispatchers.IO) { launcher.openApp()?.let { error(it.sentence) } }
+      Action.OPEN_APP -> cs.launch(Dispatchers.IO) { launcher.openApp()?.let { notify(project, it.sentence, NotificationType.ERROR) } }
       Action.DOWNLOAD -> openExternal(DOWNLOAD_URL)
       Action.OPEN_DOCS -> openExternal(DOCS_URL)
       Action.SET_APP_PATH -> ApplicationManager.getApplication().invokeLater({
@@ -215,17 +213,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
   }
 
   /** Shows [reason]'s sentence with its actions. */
-  fun notify(reason: Reason) {
-    val notification = group().createNotification(StringUtil.escapeXmlEntities(reason.sentence), NotificationType.ERROR)
-    reason.actions.forEach { action -> notification.addAction(NotificationAction.createSimpleExpiring(action.label) { perform(action) }) }
-    notification.notify(project)
-  }
-
-  private fun error(text: String) = group().createNotification(StringUtil.escapeXmlEntities(text), NotificationType.ERROR).notify(project)
-
-  private fun info(text: String) = group().createNotification(StringUtil.escapeXmlEntities(text), NotificationType.INFORMATION).notify(project)
-
-  private fun group() = NotificationGroupManager.getInstance().getNotificationGroup("DynoTable")
+  fun notify(reason: Reason) = notify(project, reason.sentence, NotificationType.ERROR, reason.actions.map { it.label to { perform(it) } })
 
   private fun manager() = LspClientManager.getInstance(project)
 

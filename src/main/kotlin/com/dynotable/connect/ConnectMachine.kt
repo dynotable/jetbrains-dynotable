@@ -204,15 +204,15 @@ class ConnectMachine(
   }
 
   /**
-   * Runs [block] as a query of the current session. A restart waits for it; a latch or a stop
-   * ends it at once with [SessionEnded].
+   * Runs [block] as a request of the current session. A latch, a stop or a retire ends it at once
+   * with [SessionEnded]. With [holdsRestart] (a query), a restart waits for it.
    */
-  suspend fun <T> trackRun(block: suspend () -> T): T {
+  suspend fun <T> trackRun(holdsRestart: Boolean = true, block: suspend () -> T): T {
     val ended = CompletableDeferred<Unit>()
     val current = withContext(dispatcher) {
       val current = live?.takeIf { it.initialized && (status is Status.Connected || status is Status.Unbound) } ?: throw SessionEnded()
       current.runs += ended
-      runs++
+      if (holdsRestart) runs++
       current
     }
     try {
@@ -229,7 +229,7 @@ class ConnectMachine(
     } finally {
       withContext(NonCancellable + dispatcher) {
         current.runs -= ended
-        if (--runs == 0) runWaiters.apply { forEach { it.complete(Unit) } }.clear()
+        if (holdsRestart && --runs == 0) runWaiters.apply { forEach { it.complete(Unit) } }.clear()
       }
     }
   }

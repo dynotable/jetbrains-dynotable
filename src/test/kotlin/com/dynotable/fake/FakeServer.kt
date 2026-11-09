@@ -29,6 +29,7 @@ import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -83,6 +84,10 @@ class FakeServer(
   @Volatile
   var afterInitialize: (() -> Unit)? = null
 
+  /** Drops every `didOpen`, as a server that never opened the document. */
+  @Volatile
+  var ignoreOpens = false
+
   /** The params of every `initialize`, also a refused one. */
   val initializeParams = CopyOnWriteArrayList<JsonElement>()
 
@@ -114,6 +119,15 @@ class FakeServer(
 
   /** Sends [method] to every initialized session. */
   fun notifyAll(method: String, params: Any) = sessions.filter { it.initialized }.forEach { it.remote.notify(method, params) }
+
+  /** Sends the request [method] to every initialized session: each answer, or the error it failed with. */
+  fun requestAll(method: String, params: Any): List<Any?> = sessions.filter { it.initialized }.map {
+    try {
+      it.remote.request(method, params).get(10, TimeUnit.SECONDS)
+    } catch (e: ExecutionException) {
+      e.cause
+    }
+  }
 
   /** The sessions that sent `initialized`: platform sessions. The preflight never sends it. */
   fun platformSessions(): Int = received.count { it.method == "initialized" }
@@ -242,6 +256,8 @@ class FakeServer(
 
   private fun command(session: Session, params: JsonObject): Any? {
     val uri = params["arguments"]?.asJsonArray?.firstOrNull()?.asJsonObject?.get("uri")?.asString
+    // As the app: a command for a document it never opened.
+    if (uri == null || !opened(uri)) fail(ResponseErrorCode.RequestFailed.value, "No open DynoTable document at $uri. Open the file before running it.", runFailed())
     val dialect = languages[uri].takeIf { it == "partiql" || it == "opensearch" } ?: "sql"
     return when (val command = params["command"].asString) {
       "dynotable.runStatement" -> fixture("run-$dialect.json")
@@ -259,7 +275,7 @@ class FakeServer(
     if (!session.initialized) return
     when (method) {
       "exit" -> session.socket.close()
-      "textDocument/didOpen" -> params.asJsonObject["textDocument"].asJsonObject.let {
+      "textDocument/didOpen" -> if (!ignoreOpens) params.asJsonObject["textDocument"].asJsonObject.let {
         languages[it["uri"].asString] = it["languageId"].asString
         // As the app: diagnostics for every opened document, also a clean one.
         session.remote.notify("textDocument/publishDiagnostics", JsonObject().apply {

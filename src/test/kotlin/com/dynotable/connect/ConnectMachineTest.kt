@@ -362,6 +362,23 @@ class ConnectMachineTest {
     assertTrue(held.await().exceptionOrNull() is SessionEnded)
   }
 
+  // A Validate that waits on a slow index must not hold a profile change; its stopped client never answers it.
+  @Test
+  fun `a restart does not wait for a command that holds no restart, and fails it at once`() = runTest {
+    val world = World()
+    val machine = machine(world)
+    connect(world, machine)
+    val command = async { runCatching { machine.trackRun(holdsRestart = false) { awaitCancellation() } } }
+    runCurrent()
+    val restarted = async { machine.restart() }
+    runCurrent()
+    assertEquals(Status.Starting(), machine.status)
+    assertTrue(command.await().exceptionOrNull() is SessionEnded)
+    advanceTimeBy(100)
+    world.initialize(2)
+    restarted.await()
+  }
+
   @Test
   fun `a stop of the current session fails its run, and a late stop of a retired one neither latches nor fails a run`() = runTest {
     val world = World()

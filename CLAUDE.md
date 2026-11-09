@@ -8,4 +8,4 @@
   equivalents). For live tests use an isolated dev build; prove the isolation first.
 - No outward step without the user's OK: creating or pushing to the GitHub repository, the
   JetBrains Marketplace, signing keys, the docs site.
-- Run `./gradlew build` to validate.
+- Run `./gradlew gate` to validate (CI also runs `bash scripts/drift-check.sh`).

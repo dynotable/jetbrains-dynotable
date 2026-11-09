@@ -1,0 +1,29 @@
+{
+  "indices": [
+    {
+      "name": "analytics",
+      "target": "target-1"
+    },
+    {
+      "name": "customers",
+      "target": "target-1"
+    },
+    {
+      "name": "large-products",
+      "target": "target-1"
+    },
+    {
+      "name": "orders",
+      "target": "target-1"
+    },
+    {
+      "name": "products",
+      "target": "target-1"
+    },
+    {
+      "name": "products-vectors",
+      "target": "target-1"
+    }
+  ],
+  "unreachable": []
+}

@@ -1,0 +1,110 @@
+{
+  "initialize.json": {
+    "guard": "initializeResult",
+    "provenance": "recorded"
+  },
+  "run-sql.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-sql-star.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-partiql.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-sql-set.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-partiql-set.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-sql-projection.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "run-opensearch.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  },
+  "list-profiles.json": {
+    "guard": "profileList",
+    "provenance": "recorded"
+  },
+  "list-profiles-incomplete.json": {
+    "guard": "profileList",
+    "provenance": "authored"
+  },
+  "list-tables.json": {
+    "guard": "listTables",
+    "provenance": "recorded"
+  },
+  "list-indices.json": {
+    "guard": "listIndices",
+    "provenance": "recorded"
+  },
+  "list-indices-partial.json": {
+    "guard": "listIndices",
+    "provenance": "authored"
+  },
+  "list-indices-refused.json": {
+    "guard": "listIndices",
+    "provenance": "authored"
+  },
+  "code-lens.json": {
+    "guard": "codeLensList",
+    "provenance": "recorded"
+  },
+  "progress.json": {
+    "guard": "progressList",
+    "provenance": "recorded"
+  },
+  "validate-query.json": {
+    "guard": "string",
+    "provenance": "recorded"
+  },
+  "validate-query-message.json": {
+    "guard": "showMessage",
+    "provenance": "recorded"
+  },
+  "error-auth.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-profile-required.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-profile-not-exposed.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-profile-window-required.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-stage-in-app.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-signed-out.json": {
+    "guard": "responseError",
+    "provenance": "authored"
+  },
+  "error-cancel-sql.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "error-cancel-partiql.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
+  "run-sql-key.json": {
+    "guard": "runResult",
+    "provenance": "recorded"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "indices": [
+    {
+      "name": "shared",
+      "target": "target-1"
+    },
+    {
+      "name": "shared",
+      "target": "target-2"
+    }
+  ],
+  "unreachable": [
+    {
+      "target": "target-3",
+      "message": "The target did not answer in time."
+    }
+  ],
+  "partial": {
+    "message": "AWS discovery of OpenSearch domains failed."
+  }
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "token": "356f3d2b-fa56-424d-a927-052e330a5a19",
+    "value": {
+      "kind": "begin",
+      "title": "DynoTable: running statement",
+      "cancellable": false
+    }
+  },
+  {
+    "token": "356f3d2b-fa56-424d-a927-052e330a5a19",
+    "value": {
+      "kind": "end"
+    }
+  }
+]

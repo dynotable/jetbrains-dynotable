@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "Open DynoTable on this profile (us-east-1) first — the link is bound to it and will not open a different account.",
+  "data": {
+    "code": "profile-window-required"
+  }
+}

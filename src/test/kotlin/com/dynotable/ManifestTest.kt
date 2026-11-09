@@ -38,4 +38,14 @@ class ManifestTest {
     assertEquals(build, ideaVersion.getAttribute("since-build"))
     assertNull(ideaVersion.getAttributeNode("until-build"), "until-build must stay open")
   }
+
+  // An action outside the Tools menu can only be found through Find Action.
+  @Test
+  fun `every action is in the Tools menu group`() {
+    val group = elements("group").single { it.getAttribute("id") == "DynoTable.Tools" }
+    val addedTo = (group.getElementsByTagName("add-to-group").item(0) as Element).getAttribute("group-id")
+    assertEquals("ToolsMenu", addedTo)
+    val outside = elements("action").filter { it.parentNode != group }.map { it.getAttribute("id") }
+    assertEquals(emptyList<String>(), outside)
+  }
 }

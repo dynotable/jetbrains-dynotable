@@ -1,0 +1,50 @@
+{
+  "columns": [
+    "itemId",
+    "tags",
+    "scores"
+  ],
+  "rows": [
+    {
+      "itemId": "SET_BASIC",
+      "tags": {
+        "SS": [
+          "alpha",
+          "beta",
+          "gamma"
+        ]
+      },
+      "scores": {
+        "NS": [
+          "10",
+          "20",
+          "30"
+        ]
+      }
+    },
+    {
+      "itemId": "SET_SECOND",
+      "tags": {
+        "SS": [
+          "x",
+          "y"
+        ]
+      },
+      "scores": {
+        "NS": [
+          "1",
+          "2",
+          "3"
+        ]
+      }
+    }
+  ],
+  "returnedRows": 2,
+  "totalRows": 2,
+  "truncated": false,
+  "itemsScanned": 2,
+  "approximateBytes": 171,
+  "elapsedMs": 89,
+  "executedStatement": "SELECT itemId, tags, scores FROM \"set-types\"",
+  "effectiveRowCap": 3
+}

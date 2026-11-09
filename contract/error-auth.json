@@ -1,0 +1,4 @@
+{
+  "code": -32898,
+  "message": "Invalid or missing token. Re-read lsp-port.json from the DynoTable user-data directory and reconnect."
+}

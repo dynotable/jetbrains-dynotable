@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "This editor session is not bound to a DynoTable profile: this connection named no profile and there is more than one to choose from. Pick one with dynotable/listProfiles and reconnect with it in initializationOptions.profile.",
+  "data": {
+    "code": "profile-required"
+  }
+}

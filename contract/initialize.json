@@ -1,0 +1,43 @@
+{
+  "capabilities": {
+    "textDocumentSync": 2,
+    "completionProvider": {
+      "triggerCharacters": [
+        ".",
+        "'",
+        "\""
+      ],
+      "resolveProvider": true
+    },
+    "codeActionProvider": {
+      "codeActionKinds": [
+        "quickfix",
+        ""
+      ]
+    },
+    "codeLensProvider": {
+      "resolveProvider": false
+    },
+    "documentFormattingProvider": true,
+    "hoverProvider": true,
+    "inlayHintProvider": {
+      "resolveProvider": false
+    },
+    "definitionProvider": true,
+    "documentHighlightProvider": true,
+    "renameProvider": {
+      "prepareProvider": true
+    },
+    "executeCommandProvider": {
+      "commands": [
+        "dynotable.runStatement",
+        "dynotable.openInApp",
+        "dynotable.validateQuery"
+      ]
+    }
+  },
+  "serverInfo": {
+    "name": "DynoTable",
+    "version": "1.18.2"
+  }
+}

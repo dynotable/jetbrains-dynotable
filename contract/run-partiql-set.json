@@ -1,0 +1,82 @@
+{
+  "columns": [
+    "itemId",
+    "blobs",
+    "label",
+    "scores",
+    "nestedMap",
+    "tags"
+  ],
+  "rows": [
+    {
+      "itemId": "SET_BASIC",
+      "blobs": {
+        "BS": [
+          "QUFBQQ==",
+          "QkJCQg=="
+        ]
+      },
+      "label": "basic-set-item",
+      "scores": {
+        "NS": [
+          "10",
+          "20",
+          "30"
+        ]
+      },
+      "nestedMap": {
+        "innerLabel": "inner",
+        "innerTags": {
+          "SS": [
+            "inner-a",
+            "inner-b"
+          ]
+        }
+      },
+      "tags": {
+        "SS": [
+          "alpha",
+          "beta",
+          "gamma"
+        ]
+      }
+    },
+    {
+      "itemId": "SET_SECOND",
+      "blobs": {
+        "BS": [
+          "/w=="
+        ]
+      },
+      "label": "second-set-item",
+      "scores": {
+        "NS": [
+          "1",
+          "2",
+          "3"
+        ]
+      },
+      "nestedMap": {
+        "innerLabel": "inner-2",
+        "innerTags": {
+          "SS": [
+            "n1"
+          ]
+        }
+      },
+      "tags": {
+        "SS": [
+          "x",
+          "y"
+        ]
+      }
+    }
+  ],
+  "returnedRows": 2,
+  "totalRows": 2,
+  "truncated": false,
+  "approximateBytes": 427,
+  "elapsedMs": 5,
+  "executedStatement": "SELECT * FROM \"set-types\"",
+  "effectiveRowCap": 3
+}

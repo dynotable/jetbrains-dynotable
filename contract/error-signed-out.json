@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "DynoTable is signed out. Sign in to DynoTable.",
+  "data": {
+    "code": "signed-out"
+  }
+}

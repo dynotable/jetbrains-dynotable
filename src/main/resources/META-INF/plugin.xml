@@ -40,9 +40,29 @@
     <editorHighlighterProvider filetype="DynoTable OpenSearch"
         implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
 
+    <statusBarWidgetFactory id="DynoTable.Status" implementation="com.dynotable.ui.StatusWidgetFactory"/>
+    <notificationGroup id="DynoTable" displayType="BALLOON"/>
+    <postStartupActivity implementation="com.dynotable.connect.RestoredEditors"/>
+    <platform.lsp.integrationProvider implementation="com.dynotable.connect.DynoTableIntegrationProvider"/>
+
     <projectConfigurable parentId="tools" id="com.dynotable.settings" displayName="DynoTable" nonDefaultProject="true"
                          instance="com.dynotable.settings.DynoTableConfigurable"/>
   </extensions>
+
+  <applicationListeners>
+    <listener class="com.dynotable.connect.ConnectClosing" topic="com.intellij.openapi.project.ProjectCloseListener"/>
+  </applicationListeners>
+
+  <projectListeners>
+    <listener class="com.dynotable.connect.EditorTrigger" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+  </projectListeners>
+
+  <actions>
+    <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
+            description="Connect to DynoTable again"/>
+    <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"
+            description="Open the DynoTable documentation for editors"/>
+  </actions>
 
   <extensions defaultExtensionNs="com.intellij.textmate">
     <bundleProvider implementation="com.dynotable.files.TextMateBundle"/>

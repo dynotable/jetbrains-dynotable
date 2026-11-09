@@ -119,6 +119,7 @@ class ConnectMachine(
   private var stops: Job = Job().apply { complete() }
   private var runs = 0
   private val runWaiters = mutableListOf<CompletableDeferred<Unit>>()
+  @Volatile
   private var closing = false
 
   private class Live(val id: Int) {
@@ -235,7 +236,7 @@ class ConnectMachine(
 
   /** The project or the plugin closes: no event starts anything from now on. */
   fun close() {
-    scope.launch { closing = true }
+    closing = true
   }
 
   private fun ensure(): Job? {

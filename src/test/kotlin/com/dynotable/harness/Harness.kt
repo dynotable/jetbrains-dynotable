@@ -1,11 +1,13 @@
 package com.dynotable.harness
 
+import com.dynotable.connect.ConnectCore
 import com.dynotable.connect.TEST_APP_ROOT_PROPERTY
 import com.dynotable.connect.TEST_MIN_APP_VERSION_PROPERTY
 import com.dynotable.connect.TEST_USER_DATA_DIR_PROPERTY
 import com.dynotable.fake.FakeApp
 import com.dynotable.fake.FakeRun
 import com.dynotable.fake.FakeServer
+import com.dynotable.status.Status
 import com.intellij.codeInsight.daemon.impl.HighlightInfo
 import com.intellij.notification.Notification
 import com.intellij.notification.Notifications
@@ -125,6 +127,15 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
   /** A fake app start that writes the port file of the started [fake] and stays alive, as a serving app does. */
   fun serving(): FakeRun = FakeRun.Serve(portFile, fake.port, fake.token)
 
+  val core: ConnectCore get() = ConnectCore.getInstance(project)
+
+  suspend fun awaitStatus(expected: Status, ms: Long = 15_000) {
+    waitFor("status $expected, now ${core.status}", ms) { core.status == expected }
+  }
+
+  /** The sentences of the notifications posted so far, the platform's too. */
+  fun sentences(): List<String> = notifications.map { it.content }
+
   /** The platform's Restart in the Services view and the Language Services widget. Internal API: tests only. */
   fun platformRestart(client: LspClient) = callManager("restartClient", client)
 
@@ -148,11 +159,20 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
     withContext(Dispatchers.Default) {
       LspIntegrationProvider.EP_NAME.extensionList.forEach { LspClientManager.getInstance(project).stopClients(it.javaClass) }
     }
-    waitFor("the LSP listener threads to end") { Thread.getAllStackTraces().keys.none { it.name.startsWith("LSP Listener") } }
+    try {
+      waitFor("the LSP listener threads to end") { Thread.getAllStackTraces().keys.none { it.name.startsWith("LSP Listener") } }
+    } catch (e: AssertionError) {
+      throw AssertionError("${e.message} (fake sessions ${fake.sessions.map { it.initialized }}, received ${fake.received.map { it.method }}, clients ${clients().map { it.state }}):\n${listenerStacks()}")
+    }
   }
+
+  private fun listenerStacks() = Thread.getAllStackTraces().filterKeys { it.name.startsWith("LSP Listener") }.values
+    .joinToString("\n\n") { stack -> stack.take(25).joinToString("\n") }
 
   internal suspend fun close() {
     try {
+      // As the project's close does: else a stop by the teardown reads as the platform's Stop, and a trigger connects again.
+      project.getServiceIfCreated(ConnectCore::class.java)?.machine?.close()
       stopClients()
     } finally {
       apps.forEach { it.close() }

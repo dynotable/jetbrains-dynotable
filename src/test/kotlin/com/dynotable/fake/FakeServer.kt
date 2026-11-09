@@ -1,5 +1,6 @@
 package com.dynotable.fake
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
@@ -70,6 +71,18 @@ class FakeServer(
   @Volatile
   var version: String = fixture("initialize.json").asJsonObject["serverInfo"].asJsonObject["version"].asString
 
+  /** How long `initialize` waits before it answers. */
+  @Volatile
+  var initializeDelayMs = 0L
+
+  /** Runs first in each `initialize`; it may throw [ResponseErrorException] to refuse it. */
+  @Volatile
+  var onInitialize: (() -> Unit)? = null
+
+  /** Runs after each accepted `initialize`, before the answer. */
+  @Volatile
+  var afterInitialize: (() -> Unit)? = null
+
   /** The params of every `initialize`, also a refused one. */
   val initializeParams = CopyOnWriteArrayList<JsonElement>()
 
@@ -98,6 +111,18 @@ class FakeServer(
   fun unhandle(method: String) {
     handlers.remove(method)
   }
+
+  /** Sends [method] to every initialized session. */
+  fun notifyAll(method: String, params: Any) = sessions.filter { it.initialized }.forEach { it.remote.notify(method, params) }
+
+  /** The sessions that sent `initialized`: platform sessions. The preflight never sends it. */
+  fun platformSessions(): Int = received.count { it.method == "initialized" }
+
+  /** The `languageId` of the `didOpen` for [uri]. */
+  fun language(uri: String): String? = languages[uri]
+
+  /** The refusal of the error fixture [file], to throw from a handler. */
+  fun refusal(file: String) = ResponseErrorException(gson.fromJson(fixture(file), ResponseError::class.java))
 
   /** True once a `textDocument/didOpen` for [uri] arrived. */
   fun opened(uri: String): Boolean = languages.containsKey(uri)
@@ -205,10 +230,13 @@ class FakeServer(
 
   private fun initialize(session: Session, params: JsonElement): JsonElement {
     initializeParams += params
+    Thread.sleep(initializeDelayMs)
+    onInitialize?.invoke()
     if (session.initialized) fail(ResponseErrorCode.RequestFailed.value, "This connection is already initialized.", runFailed())
     val options = params.asJsonObject["initializationOptions"]?.takeIf { it.isJsonObject }?.asJsonObject
     if (options?.get("token")?.takeIf { it.isJsonPrimitive }?.asString != token) refuse(session)
     session.initialized = true
+    afterInitialize?.invoke()
     return fixture("initialize.json").asJsonObject.apply { getAsJsonObject("serverInfo").addProperty("version", version) }
   }
 
@@ -233,6 +261,11 @@ class FakeServer(
       "exit" -> session.socket.close()
       "textDocument/didOpen" -> params.asJsonObject["textDocument"].asJsonObject.let {
         languages[it["uri"].asString] = it["languageId"].asString
+        // As the app: diagnostics for every opened document, also a clean one.
+        session.remote.notify("textDocument/publishDiagnostics", JsonObject().apply {
+          add("uri", it["uri"])
+          add("diagnostics", JsonArray())
+        })
       }
     }
   }

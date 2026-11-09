@@ -49,6 +49,10 @@ tasks.test {
   dependsOn(tasks.patchPluginXml)
   systemProperty("dynotable.patchedPluginXml", patchedPluginXml.get().asFile.absolutePath)
   systemProperty("dynotable.projectDir", layout.projectDirectory.asFile.absolutePath)
+  // Tests read these files from dynotable.projectDir; without the inputs, a change leaves the test task up to date.
+  inputs.files("README.md", "PROTOCOL.md").withPathSensitivity(PathSensitivity.RELATIVE)
+  inputs.dir("contract").withPathSensitivity(PathSensitivity.RELATIVE)
+  inputs.dir("scripts").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 val testLive by tasks.registering(Test::class) {

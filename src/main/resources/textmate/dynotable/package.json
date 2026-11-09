@@ -1,0 +1,13 @@
+{
+  "name": "dynotable",
+  "contributes": {
+    "languages": [
+      { "id": "partiql", "aliases": ["PartiQL"], "extensions": [".partiql"] },
+      { "id": "opensearch", "aliases": ["OpenSearch"], "extensions": [".opensearch"] }
+    ],
+    "grammars": [
+      { "language": "partiql", "scopeName": "source.partiql", "path": "./syntaxes/partiql.tmLanguage.json" },
+      { "language": "opensearch", "scopeName": "source.opensearch", "path": "./syntaxes/opensearch.tmLanguage.json" }
+    ]
+  }
+}

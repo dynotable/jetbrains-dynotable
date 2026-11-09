@@ -1,0 +1,155 @@
+{
+  "columns": [
+    "orderId",
+    "customerId",
+    "status",
+    "orderDate",
+    "productId",
+    "amount",
+    "items",
+    "lineItems",
+    "metadata",
+    "_id"
+  ],
+  "rows": [
+    {
+      "orderId": "ORD2024001001",
+      "customerId": "CUST001",
+      "status": "CANCELLED",
+      "orderDate": "2026-03-31T17:00:50.735Z",
+      "productId": "PROD005",
+      "amount": 49.03,
+      "items": [
+        "Widget A",
+        "Gadget X"
+      ],
+      "lineItems": [
+        {
+          "sku": "SKU-001001-1",
+          "qty": 5,
+          "price": 119.87,
+          "name": "Line item 1"
+        },
+        {
+          "sku": "SKU-001001-2",
+          "qty": 4,
+          "price": 135.78,
+          "name": "Line item 2"
+        },
+        {
+          "sku": "SKU-001001-3",
+          "qty": 3,
+          "price": 129.01,
+          "name": "Line item 3"
+        }
+      ],
+      "metadata": {
+        "channel": "web",
+        "campaign": "cmp-972",
+        "attribution": {
+          "source": "organic",
+          "medium": "apac",
+          "term": "kw-5q0"
+        },
+        "flags": [
+          "priority",
+          "cancelled"
+        ]
+      },
+      "_id": "ORD2024001001"
+    },
+    {
+      "orderId": "ORD2024001002",
+      "customerId": "CUST001",
+      "status": "CANCELLED",
+      "orderDate": "2026-10-07T07:51:02.105Z",
+      "productId": "PROD005",
+      "amount": 159.06,
+      "items": [
+        "Premium Kit",
+        "Standard Pack",
+        "Widget A"
+      ],
+      "lineItems": [
+        {
+          "sku": "SKU-001002-1",
+          "qty": 3,
+          "price": 30.06,
+          "name": "Line item 1"
+        },
+        {
+          "sku": "SKU-001002-2",
+          "qty": 3,
+          "price": 17.55,
+          "name": "Line item 2"
+        }
+      ],
+      "metadata": {
+        "channel": "mobile",
+        "campaign": "cmp-740",
+        "attribution": {
+          "source": "paid",
+          "medium": "us",
+          "term": "kw-6q2"
+        },
+        "flags": [
+          "priority",
+          "cancelled"
+        ]
+      },
+      "_id": "ORD2024001002"
+    },
+    {
+      "orderId": "ORD2024002001",
+      "customerId": "CUST002",
+      "status": "PROCESSING",
+      "orderDate": "2026-01-18T03:26:30.317Z",
+      "productId": "PROD001",
+      "amount": 221.06,
+      "items": [
+        "Standard Pack"
+      ],
+      "lineItems": [
+        {
+          "sku": "SKU-002001-1",
+          "qty": 1,
+          "price": 19.59,
+          "name": "Line item 1"
+        },
+        {
+          "sku": "SKU-002001-2",
+          "qty": 3,
+          "price": 190.59,
+          "name": "Line item 2"
+        },
+        {
+          "sku": "SKU-002001-3",
+          "qty": 2,
+          "price": 175.72,
+          "name": "Line item 3"
+        }
+      ],
+      "metadata": {
+        "channel": "mobile",
+        "campaign": "cmp-0",
+        "attribution": {
+          "source": "paid",
+          "medium": "mena",
+          "term": "kw-6f4"
+        },
+        "flags": [
+          "priority",
+          "processing"
+        ]
+      },
+      "_id": "ORD2024002001"
+    }
+  ],
+  "returnedRows": 3,
+  "totalRows": 150,
+  "truncated": true,
+  "approximateBytes": 1641,
+  "elapsedMs": 86,
+  "executedStatement": "{\"query\":{\"match_all\":{}},\"size\":3}",
+  "effectiveRowCap": 3
+}

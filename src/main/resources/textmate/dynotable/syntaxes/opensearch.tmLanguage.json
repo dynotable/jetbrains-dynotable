@@ -1,0 +1,4 @@
+{
+  "scopeName": "source.opensearch",
+  "patterns": [{"include": "source.json.comments"}]
+}

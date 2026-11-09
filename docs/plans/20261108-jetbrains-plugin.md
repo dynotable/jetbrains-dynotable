@@ -471,9 +471,9 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 **Files:**
 - Create: `PROTOCOL.md`, `contract/*`, `src/main/resources/textmate/dynotable/` (bundle manifest + grammars), `scripts/drift-check.sh`
 
-- [ ] copy `PROTOCOL.md`, `contract/` and `syntaxes/*.tmLanguage.json` from vscode-dynotable `main`; wrap the grammars in a TextMate bundle: a directory with a VS Code style `package.json` (languages `partiql` → `.partiql`, `opensearch` → `.opensearch`, and their grammars). No SQL grammar: spike point 5 showed the bundled TextMate `source.sql` colours DynoTable SQL
-- [ ] `scripts/drift-check.sh`: list `contract/` from the upstream tree, fetch `PROTOCOL.md`, `contract/*` and the two grammars, map the grammar paths, fail with the differing, missing or extra files; it runs as its own CI job, not in the local `gate`
-- [ ] test the script on a changed local copy (must fail), an extra upstream fixture (must fail) and a clean copy (must pass)
+- [x] copy `PROTOCOL.md`, `contract/` and `syntaxes/*.tmLanguage.json` from vscode-dynotable `main`; wrap the grammars in a TextMate bundle: a directory with a VS Code style `package.json` (languages `partiql` → `.partiql`, `opensearch` → `.opensearch`, and their grammars). No SQL grammar: spike point 5 showed the bundled TextMate `source.sql` colours DynoTable SQL
+- [x] `scripts/drift-check.sh`: list `contract/` from the upstream tree, fetch `PROTOCOL.md`, `contract/*` and the two grammars, map the grammar paths, fail with the differing, missing or extra files; it runs as its own CI job, not in the local `gate`. Done: the script shallow-clones upstream (`DRIFT_UPSTREAM`, `DRIFT_REF` override it) and passes against `main` today; the CI job itself is wired in Task 18
+- [x] test the script on a changed local copy (must fail), an extra upstream fixture (must fail) and a clean copy (must pass). Done: `DriftCheckTest` (JUnit, local upstream repo, no network; skipped on Windows)
 
 ### Task 4: Protocol types and fixture parsing
 

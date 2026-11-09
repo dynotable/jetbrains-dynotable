@@ -1,0 +1,14 @@
+[
+  {
+    "id": "profile-3-id",
+    "name": "profile-3-name",
+    "slug": "profile-3-slug",
+    "kind": "online",
+    "bindable": false,
+    "reason": "incomplete",
+    "engines": {
+      "dynamodb": true,
+      "opensearch": false
+    }
+  }
+]

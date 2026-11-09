@@ -1,8 +1,12 @@
 package com.dynotable.connect
 
 import com.dynotable.editor.PlanCodeVisionProvider
+import com.dynotable.explorer.Explorer
+import com.dynotable.explorer.Listing
+import com.dynotable.explorer.listingOf
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.profiles.ProfilePicker
+import com.dynotable.protocol.ListTablesResult
 import com.dynotable.protocol.PortFile
 import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableAppSettings
@@ -38,6 +42,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.WindowManager
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -105,22 +110,29 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
     override suspend fun modal() =
       withContext(Dispatchers.EDT + ModalityState.any().asContextElement()) { ModalityState.current() != ModalityState.nonModal() }
 
+    // Its answer also fills the explorer: a bound listing can take seconds.
     override suspend fun connectTimeListing(attempt: Int): Reason? {
       val client = clientOf(attempt) ?: return null
+      val tables = CompletableDeferred<Listing<ListTablesResult>>()
+      Explorer.getInstance(project).connected(attempt, client, tables)
       return try {
-        client.sendRequest { (it as DynoTableServer).listTables(JsonObject()) }
+        tables.complete(listingOf(client.sendRequest { (it as DynoTableServer).listTables(JsonObject()) }, ListTablesResult::from))
         null
       } catch (e: ResponseErrorException) {
+        tables.complete(Listing.Failed(e.responseError.message))
         when {
           e.responseError.code == METHOD_NOT_FOUND_CODE -> Reason.MISSING_REQUEST
           failureCode(e.responseError) == "profile-required" -> Reason.UNBOUND
           // `signed-out` too: the app ends the session itself.
           else -> null
         }
+      } finally {
+        tables.complete(Listing.Failed(Reason.CONNECTION_ENDED.sentence))
       }
     }
 
     override fun onStatus(status: Status) {
+      project.getServiceIfCreated(Explorer::class.java)?.changed()
       ApplicationManager.getApplication().invokeLater({
         WindowManager.getInstance().getStatusBar(project)?.updateWidget(StatusWidget.ID)
         PlanCodeVisionProvider.refresh(project)
@@ -164,9 +176,12 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
   }
 
   /** The current session's client, with no connect; `null` while nothing serves. */
-  fun serving(): LspClient? = when (val status = machine.status) {
-    is Status.Connected -> clientOf(status.attempt)
-    is Status.Unbound -> clientOf(status.attempt)
+  fun serving(): LspClient? = session()?.let(::clientOf)
+
+  /** The attempt whose session serves, bound or not; `null` while nothing serves. */
+  fun session(): Int? = when (val status = machine.status) {
+    is Status.Connected -> status.attempt
+    is Status.Unbound -> status.attempt
     else -> null
   }
 

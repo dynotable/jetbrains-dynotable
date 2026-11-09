@@ -150,6 +150,9 @@ class FakeServer(
   /** True once a `textDocument/didOpen` for [uri] arrived. */
   fun opened(uri: String): Boolean = languages.containsKey(uri)
 
+  /** The `didOpen` URI of the file named [name]: encoded as the client sent it (a space is `%20`). */
+  fun openedUri(name: String): String? = languages.keys.singleOrNull { it.endsWith("/$name") }
+
   fun start() {
     val socket = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
     server = socket

@@ -1,6 +1,7 @@
 package com.dynotable.profiles
 
 import com.dynotable.protocol.ProfileRow
+import com.dynotable.ui.plain
 
 const val EMPTY_ROSTER = "DynoTable has no profiles. Create a profile in DynoTable."
 const val INCOMPLETE = "This profile is incomplete. Finish setting it up in DynoTable."
@@ -36,6 +37,3 @@ fun pickerOf(rows: List<ProfileRow>): Picker {
     },
   )
 }
-
-// A popup row is a JLabel, which renders a text that starts with `<html>` as HTML.
-private fun plain(text: String) = if (text.startsWith("<html>", ignoreCase = true)) "\u200B$text" else text

@@ -29,6 +29,9 @@ interface DynoTableServer : LanguageServer {
 
   @JsonRequest("dynotable/listTables")
   fun listTables(params: JsonObject): CompletableFuture<JsonElement>
+
+  @JsonRequest("dynotable/listIndices")
+  fun listIndices(params: JsonObject): CompletableFuture<JsonElement>
 }
 
 /** Starts nothing itself: the plugin starts its clients through [ConnectCore], after its preflight. */

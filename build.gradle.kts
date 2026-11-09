@@ -59,6 +59,10 @@ tasks.test {
   inputs.files("README.md", "PROTOCOL.md").withPathSensitivity(PathSensitivity.RELATIVE)
   inputs.dir("contract").withPathSensitivity(PathSensitivity.RELATIVE)
   inputs.dir("scripts").withPathSensitivity(PathSensitivity.RELATIVE)
+  // New Query writes scratch files. A space in the path, as in the macOS config dir, makes the encoded `didOpen` URI differ from the path.
+  val scratches = layout.buildDirectory.dir("tmp/test scratches").get().asFile
+  systemProperty("idea.scratch.path", scratches.absolutePath)
+  doFirst { scratches.deleteRecursively() }
 }
 
 val testLive by tasks.registering(Test::class) {

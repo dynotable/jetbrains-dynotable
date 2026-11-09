@@ -60,8 +60,13 @@ class DynoTableCommands : LspCommandsSupport() {
   }
 }
 
+/** What a request gave a caller that shows its failure itself. */
+sealed interface Reply
+
 /** A command's answer. */
-class Answer(val value: Any?)
+class Answer(val value: Any?) : Reply
+
+class Unanswered(val failure: Failure) : Reply
 
 /** Sends the server's commands: connects first, and shows a refusal once, in the server's own sentence. */
 @Service(Service.Level.PROJECT)
@@ -84,11 +89,20 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
   }
 
   /** A custom request of [client]'s session. `null` when it did not answer; then the user has seen why, or the status says it. */
-  suspend fun <T> custom(client: LspClient, method: String, sender: (DynoTableServer) -> CompletableFuture<T>): Answer? = try {
+  suspend fun <T> custom(client: LspClient, method: String, sender: (DynoTableServer) -> CompletableFuture<T>): Answer? =
+    when (val reply = reply(client, sender)) {
+      is Answer -> reply
+      is Unanswered -> {
+        report(null, reply.failure, method, emptyList())
+        null
+      }
+    }
+
+  /** A custom request of [client]'s session that shows nothing: the caller shows its failure. */
+  suspend fun <T> reply(client: LspClient, sender: (DynoTableServer) -> CompletableFuture<T>): Reply = try {
     Answer(request(client, holdsRestart = false) { sender(it as DynoTableServer) })
   } catch (e: CommandFailed) {
-    report(null, e.failure, method, emptyList())
-    null
+    Unanswered(e.failure)
   }
 
   private suspend fun command(client: LspClient, file: VirtualFile, command: String, args: List<Any?>): Answer? = try {

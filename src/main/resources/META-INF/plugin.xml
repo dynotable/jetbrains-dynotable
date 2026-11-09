@@ -44,6 +44,8 @@
     <notificationGroup id="DynoTable" displayType="BALLOON"/>
     <toolWindow id="DynoTable Results" anchor="bottom" canCloseContents="true" icon="/icons/dynotable.svg"
                 factoryClass="com.dynotable.results.ResultsToolWindowFactory"/>
+    <toolWindow id="DynoTable" anchor="left" icon="/icons/dynotable.svg"
+                factoryClass="com.dynotable.explorer.ExplorerToolWindowFactory"/>
     <actionPromoter implementation="com.dynotable.run.DynoTableActionPromoter"/>
     <postStartupActivity implementation="com.dynotable.connect.RestoredEditors"/>
     <codeInsight.codeVisionProvider implementation="com.dynotable.editor.PlanCodeVisionProvider"/>
@@ -59,6 +61,7 @@
 
   <projectListeners>
     <listener class="com.dynotable.connect.EditorTrigger" topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
+    <listener class="com.dynotable.explorer.ExplorerShown" topic="com.intellij.openapi.wm.ex.ToolWindowManagerListener"/>
   </projectListeners>
 
   <actions>
@@ -72,6 +75,12 @@
     </action>
     <action id="DynoTable.SelectProfile" class="com.dynotable.profiles.SelectProfileAction" text="Select DynoTable Profile"
             description="Choose the DynoTable profile that runs queries and lists tables"/>
+    <action id="DynoTable.NewQuery" class="com.dynotable.query.NewQueryAction" text="New DynoTable Query"
+            description="Open a new query: on an explorer table or index, a query for it; else in the language you choose"/>
+    <action id="DynoTable.PickIndex" class="com.dynotable.query.PickIndexAction" text="Pick OpenSearch Index"
+            description="Write the chosen OpenSearch index into the first line of the query"/>
+    <action id="DynoTable.RefreshExplorer" class="com.dynotable.explorer.RefreshExplorerAction" text="Refresh DynoTable Explorer"
+            description="List the tables and indices again" icon="AllIcons.Actions.Refresh"/>
     <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
             description="Connect to DynoTable again"/>
     <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"

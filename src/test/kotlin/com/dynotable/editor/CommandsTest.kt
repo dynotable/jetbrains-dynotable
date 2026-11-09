@@ -190,13 +190,17 @@ class CommandsTest {
     ScratchRootType.getInstance().createScratchFile(project.get(), "fix.partiql", PartiQLLanguage, text)!!.also { fixture.openFileInEditor(it) }
   }
 
-  /** The server offers [actions] for a diagnostic on the first word of [file]; answers the quick fixes the editor shows. */
-  private suspend fun quickFixes(file: VirtualFile, vararg actions: CodeAction): List<com.intellij.codeInsight.intention.IntentionAction> {
+  /**
+   * The server offers the [actions] for its URI of [file] for a diagnostic on the first word of the
+   * file; answers the quick fixes the editor shows.
+   */
+  private suspend fun quickFixes(file: VirtualFile, actions: (uri: String) -> List<CodeAction>): List<com.intellij.codeInsight.intention.IntentionAction> {
     connected()
-    waitFor("didOpen of the scratch file") { h.fake.opened(file.url) }
-    h.fake.handle("textDocument/codeAction") { _, _ -> actions.toList() }
+    waitFor("didOpen of the scratch file") { h.fake.openedUri(file.name) != null }
+    val uri = h.fake.openedUri(file.name)!!
+    h.fake.handle("textDocument/codeAction") { _, _ -> actions(uri) }
     val range = Range(Position(0, 0), Position(0, 5))
-    h.fake.notifyAll("textDocument/publishDiagnostics", PublishDiagnosticsParams(file.url, listOf(Diagnostic(range, "Unknown keyword"))))
+    h.fake.notifyAll("textDocument/publishDiagnostics", PublishDiagnosticsParams(uri, listOf(Diagnostic(range, "Unknown keyword"))))
     awaitHighlighting(fixture, "the diagnostic") { infos -> infos.any { it.description == "Unknown keyword" } }
     return withContext(Dispatchers.EDT) { fixture.availableIntentions }
   }
@@ -212,11 +216,12 @@ class CommandsTest {
     h.fake.start()
     val file = scratch("SELEC 1")
     val first = Range(Position(0, 0), Position(0, 5))
-    val intentions = quickFixes(
-      file,
-      quickFix("Replace with SELECT") { edit = WorkspaceEdit(mapOf(file.url to listOf(TextEdit(first, "SELECT")))) },
-      quickFix("Edit two files") { edit = WorkspaceEdit(mapOf(file.url to listOf(TextEdit(first, "X")), "file:///other.partiql" to listOf(TextEdit(first, "X")))) },
-    )
+    val intentions = quickFixes(file) { uri ->
+      listOf(
+        quickFix("Replace with SELECT") { edit = WorkspaceEdit(mapOf(uri to listOf(TextEdit(first, "SELECT")))) },
+        quickFix("Edit two files") { edit = WorkspaceEdit(mapOf(uri to listOf(TextEdit(first, "X")), "file:///other.partiql" to listOf(TextEdit(first, "X")))) },
+      )
+    }
     val titles = intentions.map { it.text }
     assertFalse("Edit two files" in titles, "$titles")
     withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Replace with SELECT" }) }
@@ -229,7 +234,7 @@ class CommandsTest {
     h.fake.handle("command:$VALIDATE_QUERY") { _, _ -> throw h.fake.refusal("error-profile-required.json") }
     h.fake.start()
     val file = scratch("SELEC 1")
-    val intentions = quickFixes(file, quickFix("Validate") { command = Command("Validate", VALIDATE_QUERY, args(file)) })
+    val intentions = quickFixes(file) { uri -> listOf(quickFix("Validate") { command = Command("Validate", VALIDATE_QUERY, listOf(JsonObject().apply { addProperty("uri", uri) })) }) }
     withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Validate" }) }
     waitFor("the refusal") { h.notifications.isNotEmpty() }
     val shown = h.notifications.single()

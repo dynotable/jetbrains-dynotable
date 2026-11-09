@@ -50,8 +50,21 @@ intellijPlatform {
 
 val patchedPluginXml = layout.buildDirectory.file("tmp/patchPluginXml/plugin.xml")
 
+// The IntelliJ Platform Gradle Plugin sets up the IDE only for `test` (and its own `TestIdeTask`), not
+// for another `Test` task. So `testLive` runs `test` with the live tests only.
+val live = gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "testLive" }
+
 tasks.test {
-  useJUnitPlatform { excludeTags("live") }
+  useJUnitPlatform { if (live) includeTags("live") else excludeTags("live") }
+  if (live) {
+    // The app's state is not an input: a live run never comes from the cache.
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    // Read through the providers, so that the configuration cache sees a change.
+    listOf("USER_DATA_DIR", "APP_PATH", "PROFILE", "LARGE_TABLE", "DENY_USER_DATA_DIR").map { "DYNOTABLE_LIVE_$it" }.forEach { name ->
+      providers.environmentVariable(name).orNull?.let { environment(name, it) }
+    }
+  }
   dependsOn(tasks.patchPluginXml)
   systemProperty("dynotable.patchedPluginXml", patchedPluginXml.get().asFile.absolutePath)
   systemProperty("dynotable.projectDir", layout.projectDirectory.asFile.absolutePath)
@@ -65,10 +78,8 @@ tasks.test {
   doFirst { scratches.deleteRecursively() }
 }
 
-val testLive by tasks.registering(Test::class) {
-  description = "Runs the @Tag(\"live\") tests against a prepared app. Local only."
+tasks.register("testLive") {
+  description = "Runs only the @Tag(\"live\") tests, against a prepared app. Local only."
   group = "verification"
-  testClassesDirs = sourceSets.test.get().output.classesDirs
-  classpath = sourceSets.test.get().runtimeClasspath
-  useJUnitPlatform { includeTags("live") }
+  dependsOn(tasks.test)
 }

@@ -4,10 +4,13 @@ import com.dynotable.connect.ConnectCore
 import com.dynotable.connect.TEST_APP_ROOT_PROPERTY
 import com.dynotable.connect.TEST_MIN_APP_VERSION_PROPERTY
 import com.dynotable.connect.TEST_USER_DATA_DIR_PROPERTY
+import com.dynotable.editor.LSP_CODE_VISION_PROVIDER_ID
 import com.dynotable.fake.FakeApp
 import com.dynotable.fake.FakeRun
 import com.dynotable.fake.FakeServer
 import com.dynotable.status.Status
+import com.intellij.codeInsight.codeVision.CodeVisionProvider
+import com.intellij.codeInsight.codeVision.ui.model.TextCodeVisionEntry
 import com.intellij.codeInsight.daemon.impl.HighlightInfo
 import com.intellij.notification.Notification
 import com.intellij.notification.Notifications
@@ -16,6 +19,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.asContextElement
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.ListPopup
 import com.intellij.openapi.ui.popup.ListPopupStep
@@ -200,6 +205,23 @@ suspend fun waitFor(what: String, ms: Long = 15_000, condition: suspend () -> Bo
  */
 suspend fun awaitHighlighting(fixture: CodeInsightTestFixture, what: String, ms: Long = 15_000, condition: (List<HighlightInfo>) -> Boolean) {
   waitFor(what, ms) { condition(runInEdtAndGet { fixture.doHighlighting() }) }
+}
+
+/** What [providerId] shows in the lens row, as the Code Vision host computes it: (line, entry). */
+suspend fun lensRow(editor: Editor, providerId: String): List<Pair<Int, TextCodeVisionEntry>> {
+  @Suppress("UNCHECKED_CAST")
+  val provider = CodeVisionProvider.providersExtensionPoint.extensionList.single { it.id == providerId } as CodeVisionProvider<Unit>
+  val state = withContext(Dispatchers.Default) { provider.computeCodeVision(editor, Unit) }
+  return readAction { state.result.map { (range, entry) -> editor.document.getLineNumber(range.startOffset) to entry as TextCodeVisionEntry } }
+}
+
+/** The platform shows the server's lenses once its highlighting asked for them. */
+suspend fun serverLenses(fixture: CodeInsightTestFixture, editor: Editor, ms: Long = 15_000): List<Pair<Int, TextCodeVisionEntry>> {
+  waitFor("the server lenses", ms) {
+    runInEdtAndGet { fixture.doHighlighting() }
+    lensRow(editor, LSP_CODE_VISION_PROVIDER_ID).isNotEmpty()
+  }
+  return lensRow(editor, LSP_CODE_VISION_PROVIDER_ID)
 }
 
 /** Runs [block] on the EDT while a modal dialog is open, for example to close that dialog. */

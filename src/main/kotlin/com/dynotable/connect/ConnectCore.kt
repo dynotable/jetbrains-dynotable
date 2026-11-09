@@ -75,6 +75,14 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
   @Volatile
   private var descriptor: DynoTableClientDescriptor? = null
 
+  /** Starts the app. In test mode the default starts only a fake binary; only a test may replace it. */
+  @Volatile
+  internal var spawner: Spawner = Spawner.of(testMode, overrides.testAppRoot)
+    set(value) {
+      check(testMode) { "The spawner is a test seam" }
+      field = value
+    }
+
   private val launcher = Launcher(
     platform,
     home,
@@ -83,7 +91,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
     launcherOff = { settings.userDataDir.isNotEmpty() },
     locate = { locateApp(Fs.Local, platform, env, home, settings.appPath, overrides.testAppRoot) },
     readPortFile = ::readPort,
-    spawner = Spawner.of(testMode, overrides.testAppRoot),
+    spawner = { this@ConnectCore.spawner.start(it) },
   )
 
   private val seams = object : ConnectSeams {

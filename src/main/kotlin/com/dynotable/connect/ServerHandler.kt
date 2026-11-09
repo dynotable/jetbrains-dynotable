@@ -5,6 +5,7 @@ import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import org.eclipse.lsp4j.ApplyWorkspaceEditParams
 import org.eclipse.lsp4j.ApplyWorkspaceEditResponse
 import org.eclipse.lsp4j.ConfigurationParams
+import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.RegistrationParams
@@ -17,16 +18,16 @@ import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 import java.util.concurrent.CompletableFuture
 
 /**
- * The platform's handler of server-to-client messages, with three changes: it records the URIs the
- * server published diagnostics for, it refuses the requests the server never sends, and it escapes
+ * The platform's handler of server-to-client messages, with three changes: it records the diagnostics
+ * the server last published per URI, it refuses the requests the server never sends, and it escapes
  * message text, which the platform shows as HTML.
  */
 class ServerHandler(
   private val next: LspServerNotificationsHandler,
-  private val published: MutableSet<String>,
+  private val published: MutableMap<String, List<Diagnostic>>,
 ) : LspServerNotificationsHandler by next {
   override fun publishDiagnostics(params: PublishDiagnosticsParams) {
-    published += params.uri
+    published[params.uri] = params.diagnostics ?: emptyList()
     next.publishDiagnostics(params)
   }
 

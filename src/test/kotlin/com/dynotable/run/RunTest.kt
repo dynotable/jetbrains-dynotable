@@ -1,13 +1,14 @@
 package com.dynotable.run
 
 import com.dynotable.editor.CHANGED
-import com.dynotable.editor.LSP_CODE_VISION_PROVIDER_ID
 import com.dynotable.editor.NO_OPEN
 import com.dynotable.editor.OPEN_CHANGED
 import com.dynotable.editor.PLAN_PROVIDER_ID
 import com.dynotable.editor.ServerCommands
 import com.dynotable.editor.UNREADABLE
 import com.dynotable.harness.harnessFixture
+import com.dynotable.harness.lensRow
+import com.dynotable.harness.serverLenses
 import com.dynotable.harness.waitFor
 import com.dynotable.refusals.OPEN_IN_APP
 import com.dynotable.refusals.RUN_STATEMENT
@@ -25,10 +26,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.intellij.codeInsight.codeVision.CodeVisionInitializer
-import com.intellij.codeInsight.codeVision.CodeVisionProvider
 import com.intellij.codeInsight.codeVision.settings.CodeVisionSettings
 import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
-import com.intellij.codeInsight.codeVision.ui.model.TextCodeVisionEntry
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CustomizedDataContext
@@ -39,7 +38,6 @@ import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.rearrangeByPromoters
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ex.EditorEx
@@ -55,7 +53,6 @@ import com.intellij.testFramework.junit5.TestApplication
 import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
-import com.intellij.testFramework.runInEdtAndGet
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import kotlinx.coroutines.CoroutineScope
@@ -136,23 +133,6 @@ class RunTest {
     } finally {
       settings.codeVisionEnabled = true
     }
-  }
-
-  /** What [providerId] shows in the lens row, as the Code Vision host computes it: (line, entry). */
-  private suspend fun lensRow(editor: Editor, providerId: String): List<Pair<Int, TextCodeVisionEntry>> {
-    @Suppress("UNCHECKED_CAST")
-    val provider = CodeVisionProvider.providersExtensionPoint.extensionList.single { it.id == providerId } as CodeVisionProvider<Unit>
-    val state = withContext(Dispatchers.Default) { provider.computeCodeVision(editor, Unit) }
-    return readAction { state.result.map { (range, entry) -> editor.document.getLineNumber(range.startOffset) to entry as TextCodeVisionEntry } }
-  }
-
-  /** The platform shows the server's lenses once its highlighting asked for them. */
-  private suspend fun serverLenses(editor: Editor): List<Pair<Int, TextCodeVisionEntry>> {
-    waitFor("the server lenses") {
-      runInEdtAndGet { fixture.doHighlighting() }
-      lensRow(editor, LSP_CODE_VISION_PROVIDER_ID).isNotEmpty()
-    }
-    return lensRow(editor, LSP_CODE_VISION_PROVIDER_ID)
   }
 
   private fun runs() = h.fake.received.filter { it.method == "workspace/executeCommand" && it.params.asJsonObject["command"].asString == RUN_STATEMENT }
@@ -501,7 +481,7 @@ class RunTest {
       start()
       val editor = open("plan.dynotable.sql")
       waitFor("a plan refresh in the session, now $refreshes") { refreshes.any { it is Status.Connected } }
-      val run = serverLenses(editor).single { (line, entry) -> line == 1 && entry.text == "Run" }
+      val run = serverLenses(fixture, editor).single { (line, entry) -> line == 1 && entry.text == "Run" }
       assertEquals(listOf(run.first to "Scan customers · ~100 items"), lensRow(editor, PLAN_PROVIDER_ID).map { (line, entry) -> line to entry.text })
       withContext(Dispatchers.EDT) {
         val inlays = editor.inlayModel
@@ -518,7 +498,7 @@ class RunTest {
   fun `a Run lens click runs with the lens argument's range and shows the rows`() = run {
     start()
     val editor = open("click.dynotable.sql")
-    val run = serverLenses(editor).single { (line, entry) -> line == 1 && entry.text == "Run" }.second as ClickableTextCodeVisionEntry
+    val run = serverLenses(fixture, editor).single { (line, entry) -> line == 1 && entry.text == "Run" }.second as ClickableTextCodeVisionEntry
     withContext(Dispatchers.EDT) { run.onClick(editor) }
     waitFor("the result view") { results.view is View.Result }
     assertEquals(range(line(1, 26)), lastRun()["range"])

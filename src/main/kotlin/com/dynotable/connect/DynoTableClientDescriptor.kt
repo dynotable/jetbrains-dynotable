@@ -16,6 +16,7 @@ import com.intellij.platform.lsp.api.LspIntegrationProvider
 import com.intellij.platform.lsp.api.LspServerListener
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspClientDescriptor
+import org.eclipse.lsp4j.Diagnostic
 import org.eclipse.lsp4j.InitializeResult
 import org.eclipse.lsp4j.jsonrpc.services.JsonRequest
 import org.eclipse.lsp4j.services.LanguageServer
@@ -53,11 +54,11 @@ class DynoTableClientDescriptor(
   private val listener: LspServerListener,
 ) : ProjectWideLspClientDescriptor(project, "DynoTable") {
   /**
-   * The URIs the server published diagnostics for in the current session: it does so for every
-   * document it opened. The platform's Restart starts a new session on this descriptor.
+   * The diagnostics the server last published per URI in the current session: it publishes for
+   * every document it opened. The platform's Restart starts a new session on this descriptor.
    */
   @Volatile
-  var published: Set<String> = emptySet()
+  var published: Map<String, List<Diagnostic>> = emptyMap()
     private set
 
   override fun isSupportedFile(file: VirtualFile) = file.fileType is DynoTableFileType
@@ -81,7 +82,7 @@ class DynoTableClientDescriptor(
   override val lspServerListener = listener
 
   override fun createLsp4jClient(handler: LspServerNotificationsHandler) =
-    Lsp4jClient(ServerHandler(handler, ConcurrentHashMap.newKeySet<String>().also { published = it }))
+    Lsp4jClient(ServerHandler(handler, ConcurrentHashMap<String, List<Diagnostic>>().also { published = it }))
 
   override val lspCustomization = DynoTableCustomization()
 }

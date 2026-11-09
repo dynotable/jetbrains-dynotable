@@ -19,7 +19,7 @@ const val PERL = "/usr/bin/perl"
  * A child in the IDE's session and process group dies on Ctrl+C or a terminal close. `exec` keeps
  * the pid, so the exit code passes through; `exit 127` reports an `exec` that failed.
  */
-private val DETACH = listOf(PERL, "-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV; exit 127")
+internal val DETACH = listOf(PERL, "-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV; exit 127")
 private const val EXEC_FAILED = 127
 private const val OPEN = "/usr/bin/open"
 

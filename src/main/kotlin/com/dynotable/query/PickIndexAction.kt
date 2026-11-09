@@ -75,6 +75,8 @@ class IndexPicker(private val project: Project, private val cs: CoroutineScope) 
       is Unpinnable -> notify(project, pin.warning, NotificationType.WARNING)
       is Pin -> withContext(Dispatchers.EDT) {
         WriteCommandAction.runWriteCommandAction(project, "Pick Index", null, {
+          // The session can change while the write waits for the EDT.
+          if (core.session() != session) return@runWriteCommandAction
           val end = if (document.lineCount == 0) 0 else document.getLineEndOffset(0)
           document.replaceString(0, end, applyPin(document.getText(TextRange(0, end)), pin))
         })

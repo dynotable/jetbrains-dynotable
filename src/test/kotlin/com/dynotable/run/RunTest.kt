@@ -83,6 +83,7 @@ import org.junit.jupiter.api.condition.OS
 import java.awt.datatransfer.DataFlavor
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JLabel
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
@@ -507,6 +508,28 @@ class RunTest {
       assertEquals(emptyList<Pair<Int, String>>(), lensRow(editor, PLAN_PROVIDER_ID).map { (line, entry) -> line to entry.text })
     } finally {
       lifetime.terminate()
+    }
+  }
+
+  // The platform's Restart keeps the attempt: a fetch that the Restart ended must not stay as the plan of the new session.
+  @Test
+  fun `the plan shows after a platform Restart that ended its fetch`() = integrationTest {
+    val unanswered = CompletableFuture<Any?>()
+    val hold = AtomicBoolean(true)
+    h.fake.handle("textDocument/inlayHint") { _, _ -> if (hold.get()) unanswered else listOf(InlayHint(Position(1, 26), Either.forLeft("Scan customers · ~100 items"))) }
+    start()
+    val editor = open("restart-plan.dynotable.sql")
+    val attempt = h.connected()
+    try {
+      lensRow(editor, PLAN_PROVIDER_ID)
+      waitFor("the held plan request") { h.fake.received.any { it.method == "textDocument/inlayHint" } }
+      hold.set(false)
+      h.platformRestart(h.clients().single())
+      waitFor("a second platform session") { h.fake.platformSessions() == 2 }
+      h.awaitStatus(Status.Connected(attempt))
+      waitFor("the plan") { lensRow(editor, PLAN_PROVIDER_ID).isNotEmpty() }
+    } finally {
+      unanswered.complete(null)
     }
   }
 

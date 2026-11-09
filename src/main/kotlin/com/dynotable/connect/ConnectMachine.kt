@@ -93,6 +93,11 @@ class ConnectMachine(
   var status: Status = Status.Hidden
     private set
 
+  /** Counts the sessions that started. The platform's Restart starts a new session for the same attempt. */
+  @Volatile
+  var sessions = 0
+    private set
+
   private var attempts = 0
   private var inFlight: Job? = null
   private var restarting = false
@@ -375,11 +380,14 @@ class ConnectMachine(
     } ?: return Reason.TIMED_OUT
     if (closing || live !== current) return null
     if (!initialized) return Reason.START_FAILED
+    // The platform's Stop can come between `serverInitialized` and this resume.
+    if (status == Status.Disconnected(Reason.STOPPED)) return null
     connected(id)
     return null
   }
 
   private fun connected(attempt: Int) {
+    sessions++
     setStatus(Status.Connected(attempt))
     scope.launch {
       val reason = try {

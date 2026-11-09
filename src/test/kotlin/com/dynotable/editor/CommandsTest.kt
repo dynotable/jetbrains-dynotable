@@ -284,6 +284,24 @@ class CommandsTest {
     assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 
+  // An unversioned edit made for older text can point past the end of the file; its command must not run either.
+  @Test
+  fun `a fix with an edit that does not fit the file applies nothing and says so`() = integrationTest {
+    h.fake.start()
+    val file = scratch("SELEC 1")
+    val intentions = quickFixes(file) { uri ->
+      listOf(
+        quickFix("Stale edit") {
+          edit = WorkspaceEdit(mapOf(uri to listOf(TextEdit(Range(Position(0, 0), Position(0, 5)), "SELECT"), TextEdit(Range(Position(3, 0), Position(3, 1)), "X"))))
+          command = Command("Validate", VALIDATE_QUERY, listOf(JsonObject().apply { addProperty("uri", uri) }))
+        },
+      )
+    }
+    withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Stale edit" }) }
+    assertEquals("SELEC 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
+    assertEquals(listOf(FIX_CHANGED), h.sentences())
+  }
+
   @Test
   fun `a profile-required refusal of a quick fix's command shows its sentence with Select Profile`() = integrationTest {
     val refusal = h.fake.fixture("error-profile-required.json").asJsonObject

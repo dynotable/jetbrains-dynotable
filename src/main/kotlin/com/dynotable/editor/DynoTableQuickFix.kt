@@ -1,7 +1,9 @@
 package com.dynotable.editor
 
+import com.dynotable.refusals.notify
 import com.intellij.codeInsight.FileModificationService
 import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -10,9 +12,12 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.customization.LspIntentionAction
 import com.intellij.platform.lsp.util.applyTextEdits
+import com.intellij.platform.lsp.util.getRangeInDocument
 import com.intellij.psi.PsiFile
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.TextEdit
+
+const val FIX_CHANGED = "The file changed after DynoTable made this fix. Try the fix again."
 
 /**
  * The platform's own code action is hidden in a file outside project content, such as a scratch file
@@ -29,6 +34,11 @@ class DynoTableQuickFix(client: LspClient, private val action: CodeAction) : Lsp
     val file = psiFile.virtualFile ?: return
     val edits = edits(file) ?: return
     if (!FileModificationService.getInstance().prepareVirtualFilesForWrite(project, listOf(file))) return
+    // The platform applies the edits one by one and stops at the first that does not fit: the fix would apply in part.
+    if (edits.any { getRangeInDocument(editor.document, it.range) == null }) {
+      notify(project, FIX_CHANGED, NotificationType.WARNING)
+      return
+    }
     if (edits.isNotEmpty()) WriteAction.run<Throwable> { applyTextEdits(editor.document, edits) }
     val command = action.command ?: return
     DynoTableCommands.executeCommand(lspClient, file, command)

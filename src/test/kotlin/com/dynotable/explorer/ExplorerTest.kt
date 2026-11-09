@@ -20,6 +20,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.intellij.ide.scratch.ScratchFileService
 import com.intellij.ide.scratch.ScratchRootType
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -36,6 +37,7 @@ import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
 import com.intellij.ui.SimpleColoredComponent
 import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -49,6 +51,7 @@ import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
 import javax.swing.JComponent
 import javax.swing.plaf.basic.BasicHTML
 import javax.swing.tree.DefaultMutableTreeNode
@@ -267,6 +270,30 @@ class ExplorerTest {
       runBlocking { waitFor("the session to change") { h.core.status != Status.Connected(attempt) } }
     }
     IndexPicker.getInstance(project.get()).pick(document)
+    assertEquals("// dynotable: index=\n", document.text)
+  }
+
+  @Test
+  fun `Pick Index writes nothing when the session changes while the write waits for the EDT`() = integrationTest {
+    h.fake.handle("dynotable/listIndices") { _, _ -> indices("products" to "search-1") }
+    h.fake.start()
+    val document = newOpenSearchQuery().document
+    val attempt = h.connected()
+    val picker = Executors.newSingleThreadExecutor()
+    try {
+      h.popupAnswer = "products"
+      // Runs on the EDT after the picker's thread has passed the pick and asked for the EDT.
+      h.duringPopup = {
+        ApplicationManager.getApplication().invokeLater {
+          picker.submit {}.get()
+          h.core.perform(Action.RECONNECT)
+          runBlocking { waitFor("the session to change") { h.core.status != Status.Connected(attempt) } }
+        }
+      }
+      withContext(picker.asCoroutineDispatcher()) { IndexPicker.getInstance(project.get()).pick(document) }
+    } finally {
+      picker.shutdown()
+    }
     assertEquals("// dynotable: index=\n", document.text)
   }
 

@@ -66,7 +66,8 @@ class PlanCodeVisionProvider : CodeVisionProvider<Unit>, DumbAware {
     val file = FileDocumentManager.getInstance().getFile(document)?.takeIf { it.fileType is DynoTableFileType }
       ?: return CodeVisionState.Ready(emptyList())
     val core = ConnectCore.getInstance(project)
-    val session = core.session() ?: return CodeVisionState.Ready(emptyList())
+    if (core.session() == null) return CodeVisionState.Ready(emptyList())
+    val session = core.machine.sessions
     val stamp = document.modificationStamp
     val fetch = synchronized(lock) {
       editor.getUserData(FETCH)?.takeIf { it.stamp == stamp && it.session == session }

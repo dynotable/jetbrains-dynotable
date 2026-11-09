@@ -296,6 +296,21 @@ class ConnectMachineTest {
     connect(world, machine, attempt = 2)
   }
 
+  // The start resumes on the machine's dispatcher after the stop that came just after the report.
+  @Test
+  fun `a platform Stop just after serverInitialized stays stopped, and the next trigger connects`() = runTest {
+    val world = World()
+    val machine = machine(world)
+    machine.trigger()
+    runCurrent()
+    advanceTimeBy(100)
+    world.initialize(1)
+    world.stop(1, normal = true)
+    runCurrent()
+    assertEquals(Status.Disconnected(Reason.STOPPED), machine.status)
+    connect(world, machine, attempt = 2)
+  }
+
   @Test
   fun `while closing, a stop and an initialize change nothing`() = runTest {
     val world = World()

@@ -1,6 +1,7 @@
 package com.dynotable.settings
 
 import com.dynotable.connect.ConnectCore
+import com.dynotable.profiles.RequestedProfile
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.BaseState
 import com.intellij.openapi.components.RoamingType
@@ -8,6 +9,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.SimplePersistentStateComponent
 import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
+import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileTypes.ex.FileTypeManagerEx
 import com.intellij.openapi.components.serviceIfCreated
@@ -68,5 +70,29 @@ class DynoTableProjectSettings(private val project: Project) : SimplePersistentS
 
   companion object {
     fun getInstance(project: Project): DynoTableProjectSettings = project.service()
+  }
+}
+
+/**
+ * The requested profile, in `workspace.xml`: a profile id names a profile of this computer's app, so a
+ * shared project file must not carry it.
+ */
+@Service(Service.Level.PROJECT)
+@State(name = "DynoTableProfile", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
+class DynoTableWorkspaceSettings : SimplePersistentStateComponent<DynoTableWorkspaceSettings.State>(State()) {
+  class State : BaseState() {
+    var profileId by string()
+    var profileName by string()
+  }
+
+  var profile: RequestedProfile?
+    get() = state.profileId?.let { RequestedProfile(it, state.profileName.orEmpty()) }
+    set(value) {
+      state.profileId = value?.id
+      state.profileName = value?.name
+    }
+
+  companion object {
+    fun getInstance(project: Project): DynoTableWorkspaceSettings = project.service()
   }
 }

@@ -19,6 +19,7 @@ import com.intellij.openapi.application.asContextElement
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.ListPopup
 import com.intellij.openapi.ui.popup.ListPopupStep
+import com.intellij.openapi.ui.popup.ListPopupStepEx
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.platform.lsp.api.LspClient
@@ -42,8 +43,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 
-/** A row of a list popup, as the user sees it. */
-data class PopupRow(val text: String, val selectable: Boolean)
+/** A row of a list popup, as the user sees it. [detail]: its grey secondary text. */
+data class PopupRow(val text: String, val selectable: Boolean, val detail: String? = null)
 
 /**
  * One integration test's world: a test user-data dir that the [fake] serves, a test app root, every
@@ -71,6 +72,10 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
   @Volatile
   var popupAnswer: String? = null
 
+  /** Runs on the EDT while a list popup is open, before the answer. */
+  @Volatile
+  var duringPopup: (() -> Unit)? = null
+
   init {
     val record = object : Notifications {
       override fun notify(notification: Notification) {
@@ -90,7 +95,8 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
   private fun answer(popup: ListPopup) {
     @Suppress("UNCHECKED_CAST")
     val step = popup.listStep as ListPopupStep<Any?>
-    popups += step.values.map { PopupRow(step.getTextFor(it), step.isSelectable(it)) }
+    popups += step.values.map { PopupRow(step.getTextFor(it), step.isSelectable(it), (step as? ListPopupStepEx<Any?>)?.getSecondaryTextFor(it)) }
+    duringPopup?.invoke()
     val index = step.values.indexOfFirst { step.getTextFor(it) == popupAnswer && step.isSelectable(it) }
     if (index < 0) {
       popup.cancel()

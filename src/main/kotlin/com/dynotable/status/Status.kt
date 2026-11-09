@@ -1,5 +1,7 @@
 package com.dynotable.status
 
+import com.intellij.openapi.util.text.StringUtil
+
 /** What the status bar shows. [Connected] and [Unbound] carry the attempt whose session serves. */
 sealed interface Status {
   data object Hidden : Status
@@ -23,20 +25,20 @@ val Status.actions: List<Action>
     else -> listOf(Action.RECONNECT)
   }
 
-val Status.text: String
-  get() = when (this) {
-    Status.Hidden -> ""
-    is Status.Starting -> "DynoTable: connecting"
-    is Status.Connected -> "DynoTable"
-    is Status.Unbound -> "DynoTable: no profile"
-    is Status.Disconnected -> "DynoTable: disconnected"
-  }
+/** [requested]: the name of the profile asked for at `initialize`. The server does not confirm it. */
+fun Status.text(requested: String?): String = when (this) {
+  Status.Hidden -> ""
+  is Status.Starting -> "DynoTable: connecting"
+  is Status.Connected -> if (requested == null) "DynoTable" else "DynoTable: $requested"
+  is Status.Unbound -> "DynoTable: no profile"
+  is Status.Disconnected -> "DynoTable: disconnected"
+}
 
-val Status.tooltip: String
-  get() = when (this) {
-    Status.Hidden -> ""
-    is Status.Starting -> if (waitingForRun) "DynoTable reconnects when the current run ends." else "Connecting to DynoTable."
-    is Status.Connected -> "Connected to DynoTable."
-    is Status.Unbound -> Reason.UNBOUND.sentence
-    is Status.Disconnected -> reason.sentence
-  }
+/** The platform shows a tooltip as HTML. */
+fun Status.tooltip(requested: String?): String = when (this) {
+  Status.Hidden -> ""
+  is Status.Starting -> if (waitingForRun) "DynoTable reconnects when the current run ends." else "Connecting to DynoTable."
+  is Status.Connected -> if (requested == null) "Connected to DynoTable." else "Connected to DynoTable. Requested profile: ${StringUtil.escapeXmlEntities(requested)}."
+  is Status.Unbound -> Reason.UNBOUND.sentence
+  is Status.Disconnected -> reason.sentence
+}

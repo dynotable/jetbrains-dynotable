@@ -1,6 +1,7 @@
 package com.dynotable.ui
 
 import com.dynotable.connect.ConnectCore
+import com.dynotable.settings.DynoTableWorkspaceSettings
 import com.dynotable.status.Action
 import com.dynotable.status.Status
 import com.dynotable.status.actions
@@ -32,9 +33,11 @@ class StatusWidget(private val project: Project) : StatusBarWidget, StatusBarWid
 
   override fun getPresentation() = this
 
-  override fun getText() = core.status.text
+  private val requested get() = DynoTableWorkspaceSettings.getInstance(project).profile?.name
 
-  override fun getTooltipText() = core.status.tooltip
+  override fun getText() = core.status.text(requested)
+
+  override fun getTooltipText() = core.status.tooltip(requested)
 
   override fun getAlignment() = Component.LEFT_ALIGNMENT
 

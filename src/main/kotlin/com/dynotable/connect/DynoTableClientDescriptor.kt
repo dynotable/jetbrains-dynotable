@@ -5,6 +5,7 @@ import com.dynotable.files.OpenSearchFileType
 import com.dynotable.files.PartiQLFileType
 import com.dynotable.editor.DynoTableCustomization
 import com.dynotable.protocol.PortFile
+import com.dynotable.settings.DynoTableWorkspaceSettings
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.intellij.openapi.project.Project
@@ -23,6 +24,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** The server's custom requests (PROTOCOL.md). */
 interface DynoTableServer : LanguageServer {
+  @JsonRequest("dynotable/listProfiles")
+  fun listProfiles(): CompletableFuture<JsonElement>
+
   @JsonRequest("dynotable/listTables")
   fun listTables(params: JsonObject): CompletableFuture<JsonElement>
 }
@@ -57,7 +61,11 @@ class DynoTableClientDescriptor(
 
   override val lspCommunicationChannel = LspCommunicationChannel.Socket(file.port, startProcess = false)
 
-  override fun createInitializationOptions(): Any = JsonObject().apply { addProperty("token", file.token) }
+  // The profile is read at each start: a session binds its profile at `initialize` only.
+  override fun createInitializationOptions(): Any = JsonObject().apply {
+    addProperty("token", file.token)
+    DynoTableWorkspaceSettings.getInstance(project).profile?.let { addProperty("profile", it.id) }
+  }
 
   override fun getLanguageId(file: VirtualFile) = when (file.fileType) {
     PartiQLFileType -> "partiql"

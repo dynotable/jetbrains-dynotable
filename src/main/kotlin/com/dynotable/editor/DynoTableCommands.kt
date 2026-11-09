@@ -1,6 +1,7 @@
 package com.dynotable.editor
 
 import com.dynotable.connect.ConnectCore
+import com.dynotable.connect.DynoTableServer
 import com.dynotable.connect.SessionEnded
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.protocol.CommandArgs
@@ -80,6 +81,14 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
       return null
     }
     return command(client, file, command, args)
+  }
+
+  /** A custom request of [client]'s session. `null` when it did not answer; then the user has seen why, or the status says it. */
+  suspend fun <T> custom(client: LspClient, method: String, sender: (DynoTableServer) -> CompletableFuture<T>): Answer? = try {
+    Answer(request(client, holdsRestart = false) { sender(it as DynoTableServer) })
+  } catch (e: CommandFailed) {
+    report(null, e.failure, method, emptyList())
+    null
   }
 
   private suspend fun command(client: LspClient, file: VirtualFile, command: String, args: List<Any?>): Answer? = try {
@@ -198,7 +207,7 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
     throw CommandFailed(failure)
   }
 
-  private fun report(file: VirtualFile, failure: Failure, command: String, args: List<Any?>, cancelled: Boolean = false) {
+  private fun report(file: VirtualFile?, failure: Failure, command: String, args: List<Any?>, cancelled: Boolean = false) {
     when (val refusal = refusalOf(failure, cancelled, command)) {
       Refusal.Silent -> {}
       Refusal.ShowStatus -> (core.status as? Status.Disconnected)?.let { core.notify(it.reason) }
@@ -206,7 +215,7 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
     }
   }
 
-  private fun perform(action: RefusalAction, file: VirtualFile, args: List<Any?>) {
+  private fun perform(action: RefusalAction, file: VirtualFile?, args: List<Any?>) {
     when (action) {
       RefusalAction.SELECT_PROFILE -> core.perform(Action.SELECT_PROFILE)
       RefusalAction.OPEN_APP -> core.perform(Action.OPEN_APP)
@@ -217,7 +226,8 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
           addProperty("uri", run.uri)
           run.range?.let { add("range", gson.toJsonTree(it)) }
         }
-        launch(file, OPEN_IN_APP, listOf(stage))
+        // Only a refused run offers Stage, and a run has its file.
+        file?.let { launch(it, OPEN_IN_APP, listOf(stage)) }
       }
     }
   }

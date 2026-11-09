@@ -610,12 +610,12 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 **Files:**
 - Create: `profiles/Profiles.kt` (pure, port of `pickerOf`), `profiles/SelectProfileAction.kt`, tests
 
-- [ ] popup from `listProfiles` (plain-text rows): rows with `bindable: false` disabled with their reason (unknown reason → general words); empty roster → sentence and Open DynoTable; no client auto-pick (the server binds a roster of one)
-- [ ] the stored id is sent on the first connection; a choice from a replaced session is not stored; an incomplete pick → warning, no reconnect; a change restarts
-- [ ] an unbound Run lens click opens the picker; the status bar shows the requested profile
-- [ ] write unit tests for `pickerOf` (empty roster, incomplete row, non-bindable row with an unknown reason)
-- [ ] write integration tests from `profiles.test.ts`: stored id sent on first connection; choice during a session change not stored; incomplete pick → no reconnect; unbound lens click opens the picker; empty roster offers Open DynoTable; status bar shows the requested profile
-- [ ] run tests
+- [x] popup from `listProfiles` (plain-text rows): rows with `bindable: false` disabled with their reason (unknown reason → general words); empty roster → sentence and Open DynoTable; no client auto-pick (the server binds a roster of one). Done: `profiles/Profiles.kt` (`pickerOf`: row text = name; grey secondary text = slug, engines, refusal; a text that starts with `<html>` gets a zero-width space first, as the popup's `JLabel` renders it as HTML), `profiles/SelectProfileAction.kt` (action `DynoTable.SelectProfile` and the project service `ProfilePicker`: lazy connect through `client()`, `listProfiles` through the new `ServerCommands.custom` (refusals and a stop as for commands; an unreadable roster → the `UNREADABLE` sentence), `ListPopupStepEx` popup); `DynoTableServer.listProfiles`
+- [x] the stored id is sent on the first connection; a choice from a replaced session is not stored; an incomplete pick → warning, no reconnect; a change restarts. Done: `DynoTableWorkspaceSettings` (`workspace.xml`, `profileId` and `profileName`); the descriptor reads it in `createInitializationOptions` at each start (the preflight still sends none); the choice is stored only while the session of the roster (its attempt) still serves, then `machine.restart()` (waits for a running query). Changed: a refused row is not selectable ("disabled"), so no pick of it can happen and no warning is needed; its reason shows in the row
+- [x] an unbound Run lens click opens the picker; the status bar shows the requested profile. Done: `ConnectCore.perform(SELECT_PROFILE)` opens the picker (the `profile-required` refusal's action and the `unbound` status action); the widget shows "DynoTable: <name>" and the tooltip "Connected to DynoTable. Requested profile: <name>." (escaped: the platform shows a tooltip as HTML)
+- [x] write unit tests for `pickerOf` (empty roster, incomplete row, non-bindable row with an unknown reason). Done: `profiles/ProfilesTest`, also a name that starts with `<html>`
+- [x] write integration tests from `profiles.test.ts`: stored id sent on first connection; choice during a session change not stored; incomplete pick → no reconnect; unbound lens click opens the picker; empty roster offers Open DynoTable; status bar shows the requested profile. Done: `profiles/ProfilePickerTest` (6 cases, each checked by a mutation); the chosen-profile case uses the name `<b>p2</b>` for the tooltip escape; the incomplete case checks the row is not selectable and shows its reason. The harness records a row's secondary text and has `duringPopup` (as `quickPicks.during`)
+- [x] run tests
 
 ### Task 15: Explorer tool window, New Query and Pick Index
 

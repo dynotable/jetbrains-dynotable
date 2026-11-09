@@ -2,6 +2,7 @@ package com.dynotable.connect
 
 import com.dynotable.editor.PlanCodeVisionProvider
 import com.dynotable.files.DynoTableFileType
+import com.dynotable.profiles.ProfilePicker
 import com.dynotable.protocol.PortFile
 import com.dynotable.refusals.notify
 import com.dynotable.settings.DynoTableAppSettings
@@ -211,8 +212,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
       Action.SET_APP_PATH -> ApplicationManager.getApplication().invokeLater({
         ShowSettingsUtil.getInstance().showSettingsDialog(project, DynoTableConfigurable::class.java)
       }, project.disposed)
-      // The profile picker comes with the profiles.
-      Action.SELECT_PROFILE -> {}
+      Action.SELECT_PROFILE -> ProfilePicker.getInstance(project).launch()
       Action.TRUST_PROJECT -> ApplicationManager.getApplication().invokeLater({
         // The platform's own dialog, with its warning. Its yes trusts the project and tells the listeners.
         val trust = ActionManager.getInstance().getAction(TRUST_ACTION) ?: return@invokeLater

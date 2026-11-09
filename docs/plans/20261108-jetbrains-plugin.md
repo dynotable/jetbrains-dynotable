@@ -819,10 +819,10 @@ a run refused with an empty message shows our general sentence.
 
 ### Task 20: [Final] Update documentation
 
-- [ ] `README.md` (STE): requirements (minimum IDE version, app 1.19.0), Editor integration switch, file types, use, profiles, background app, free and paid, settings, privacy (incl. the residual risk), platforms (no remote, WSL, Light Edit), licence
-- [ ] `CHANGELOG.md` `## 0.1.0`
-- [ ] `docs/publishing.md`: Marketplace, signing, tag release, drift check, live tests
-- [ ] update `CLAUDE.md` if new patterns appeared
+- [x] `README.md` (STE): requirements (minimum IDE version, app 1.19.0), Editor integration switch, file types, use, profiles, background app, free and paid, settings, privacy (incl. the residual risk), platforms (no remote, WSL, Light Edit), licence. Done: modelled on vscode-dynotable 0.1.3; names the actions, tool windows, shortcuts and settings page as `plugin.xml` has them; no screenshot, no Marketplace link
+- [x] `CHANGELOG.md` `## 0.1.0` (unreleased, no date)
+- [x] `docs/publishing.md`: Marketplace, signing, tag release, drift check, live tests; also the gate and the first upload by hand
+- [x] update `CLAUDE.md` if new patterns appeared. Not needed: no new pattern; `CONTRIBUTING.md` already holds the live-test rule
 
 ## Post-Completion
 

@@ -79,6 +79,10 @@
     "guard": "responseError",
     "provenance": "recorded"
   },
+  "error-profile-not-exposed.json": {
+    "guard": "responseError",
+    "provenance": "recorded"
+  },
   "error-profile-window-required.json": {
     "guard": "responseError",
     "provenance": "recorded"

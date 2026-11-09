@@ -191,7 +191,7 @@ data class FailureData(
   companion object {
     private val CODES = arrayOf(
       "profile-required", "profile-window-required", "reauth-required", "premium-required", "signed-out",
-      "stage-in-app", "busy", "planner-refused", "run-failed",
+      "stage-in-app", "busy", "planner-refused", "run-failed", "profile-not-exposed", "agent-refused",
     )
 
     fun from(value: Any?, strict: Boolean = false): FailureData = read(value, strict) {

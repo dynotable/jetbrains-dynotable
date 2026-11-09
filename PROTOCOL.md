@@ -75,7 +75,8 @@ The process answers through its exit code:
    ```jsonc
    {
      "token": "<token from the port file>", // required
-     "profile": "prod-eu" // optional: a profile id or slug
+     "profile": "prod-eu", // optional: a profile id or slug
+     "purpose": "agent" // optional: "agent" or "editor" (the default)
    }
    ```
 
@@ -90,6 +91,10 @@ Rules:
   the port file again once (the app may have restarted with a new token), connect again, and give up
   when that fails too.
 - `initialize` can also fail with `-32803` and `data.code: "signed-out"`.
+- `purpose: "agent"` opens an [agent session](#agent-sessions). Any other value, or no value, opens
+  an editor session. A bad value does not fail `initialize`. The first app release that honours
+  `purpose` is 1.20.0. An older app ignores it and opens an editor session, so a client that must
+  not get an editor session checks `serverInfo.version`.
 - A second `initialize` on one connection is refused. To change the profile, open a new connection.
 - `shutdown` and `exit` end that connection only. The app keeps serving.
 
@@ -133,6 +138,15 @@ A session is bound to one DynoTable profile for its whole life.
 An unbound session still gives completion of keywords and diagnostics that need no schema. Every
 request that needs a profile fails with `profile-required`. Show a picker from
 `dynotable/listProfiles`, then open a new connection with the chosen `profile`.
+
+An agent session binds only a profile that the user made **available to agents** in the app:
+
+- With `profile`, a profile that is not found and a profile that is not available to agents get the
+  same answer. The session starts unbound, and every request that needs a profile fails with
+  `profile-not-exposed`. The answer does not tell if the profile exists.
+- Without `profile`, the session binds the one profile that is available to agents. When no profile
+  is available to agents, requests fail with `profile-not-exposed`. When more than one is, they fail
+  with `profile-required`.
 
 ## Languages
 
@@ -284,6 +298,30 @@ is open on the session's profile and region, the command fails with `profile-win
 index whether the query parses. Nothing runs. The answer is a sentence. When the client sent
 `window.showMessage`, the server also sends the same sentence as `window/showMessage`.
 
+## Agent sessions
+
+An agent session (`purpose: "agent"`) is for a program that acts for the user, such as a command
+line tool that an AI agent runs. It can do less than an editor session:
+
+- **Profiles.** It binds only a profile that is available to agents (see [Profiles](#profiles)).
+  `dynotable/listProfiles` lists only those profiles.
+- **Exposure is checked at each request.** When the user makes the bound profile unavailable to
+  agents, or deletes it, the next request that needs the profile fails with `profile-not-exposed`.
+  Diagnostics then use no schema. The connection stays open. When the profile becomes available
+  again, the session serves it again.
+- **Data requests are recorded.** `dynotable.runStatement`, `dynotable/listTables` and
+  `dynotable/listIndices` each write one entry in the bound profile's audit log in the app. The
+  entry holds the statement and the outcome, not the rows. When the app cannot write the entry, the
+  request fails with `run-failed` and returns no data. No other request writes an entry:
+  `dynotable/listProfiles`, completion, diagnostics and code actions are not recorded, and they can
+  name tables and indices of the bound profile.
+- **Completion gives keywords and field names only.** It gives no stored sample values and no
+  values from an index. `completionItem/resolve` adds no sample values.
+- **Refused commands.** `dynotable.openInApp`, `dynotable.validateQuery` and any unknown command fail
+  with `agent-refused`. A lens or a code action can still offer `dynotable.openInApp`.
+- Diagnostics, hover, inlay hints, code lens, code actions, formatting, definition, document
+  highlight and rename work as in an editor session.
+
 ## Custom requests
 
 All three need an initialized session. The last two also need a bound one.
@@ -358,6 +396,8 @@ The `-32803` codes:
 | `stage-in-app`            | A PartiQL write. Offer to open it in DynoTable, where the user can stage it. |
 | `busy`                    | The app is running another query. Try again later.                           |
 | `planner-refused`         | The query is too large for this device.                                      |
+| `profile-not-exposed`     | Agent sessions only: the profile is not found, or not available to agents.   |
+| `agent-refused`           | Agent sessions only: the request is not open to agent sessions.              |
 | `run-failed`              | Any other failure. `message` says what went wrong.                           |
 
 The list of codes can grow. Treat an unknown code as `run-failed`.

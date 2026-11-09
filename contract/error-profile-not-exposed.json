@@ -1,0 +1,7 @@
+{
+  "code": -32803,
+  "message": "This agent session is not bound to a DynoTable profile: no profile available to agents matches this connection — the profile does not exist, or it is not available to agents. Make the profile available to agents in DynoTable, then reconnect.",
+  "data": {
+    "code": "profile-not-exposed"
+  }
+}

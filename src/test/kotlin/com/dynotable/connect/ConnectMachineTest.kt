@@ -286,6 +286,21 @@ class ConnectMachineTest {
     assertEquals(1, world.preflights)
   }
 
+  // A test teardown or a project close stops the listed clients next; an attempt still waiting then works during that stop.
+  @Test
+  fun `a close during a start ends the attempt at once and latches nothing`() = runTest {
+    val world = World()
+    val machine = machine(world)
+    machine.trigger()
+    advanceTimeBy(100)
+    assertEquals(listOf("preflight 41121", "stop", "start 1"), world.events)
+    machine.close()
+    val idle = async { machine.awaitIdle() }
+    runCurrent()
+    assertTrue(idle.isCompleted)
+    assertEquals(Status.Starting(), machine.status)
+  }
+
   @Test
   fun `a restart during a start waits for it, then ends it before the next start`() = runTest {
     val world = World()

@@ -368,6 +368,8 @@ class ConnectTest {
       h.core.perform(Action.RECONNECT)
       h.awaitStatus(Status.Disconnected(Reason.START_FAILED))
       assertEquals(listOf("--headless"), app.argv(1))
+      // The status changes before its notification is posted.
+      waitFor("the latch's notification") { h.notifications.any { it.content == Reason.START_FAILED.sentence } }
       h.click(h.notifications.last { it.content == Reason.START_FAILED.sentence }, Action.OPEN_APP.label)
       waitFor("the windowed start") { app.starts == 2 }
       assertEquals(emptyList<String>(), app.argv(2))

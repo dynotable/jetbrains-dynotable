@@ -1,4 +1,6 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
 plugins {
   id("org.jetbrains.kotlin.jvm") version "2.4.21"
@@ -23,6 +25,8 @@ dependencies {
     testFramework(TestFrameworkType.JUnit5)
     testFramework(TestFrameworkType.JUnit5CodeInsight)
     testFramework(TestFrameworkType.Plugin.LSP)
+    pluginVerifier()
+    zipSigner()
   }
   // The platform test framework of 2026.3 needs the JUnit 6 runtime.
   testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
@@ -46,13 +50,33 @@ intellijPlatform {
     }
   }
   buildSearchableOptions = false
+  pluginVerification {
+    ides {
+      // The minimum version, and the latest release of each IDE.
+      listOf(IntelliJPlatformType.IntellijIdea, IntelliJPlatformType.DataGrip).forEach { create(it, providers.gradleProperty("platformVersion")) }
+      latest {
+        types = listOf(IntelliJPlatformType.IntellijIdea, IntelliJPlatformType.DataGrip)
+        channels = listOf(ProductRelease.Channel.RELEASE)
+      }
+    }
+  }
+  signing {
+    certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+    privateKey = providers.environmentVariable("PRIVATE_KEY")
+    password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+  }
+  publishing {
+    token = providers.environmentVariable("PUBLISH_TOKEN")
+  }
 }
 
 val patchedPluginXml = layout.buildDirectory.file("tmp/patchPluginXml/plugin.xml")
 
 // The IntelliJ Platform Gradle Plugin sets up the IDE only for `test` (and its own `TestIdeTask`), not
 // for another `Test` task. So `testLive` runs `test` with the live tests only.
-val live = gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "testLive" }
+val requested = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
+val live = "testLive" in requested
+require(!live || "gate" !in requested) { "Run gate and testLive apart: gate never runs the live tests." }
 
 tasks.test {
   useJUnitPlatform { if (live) includeTags("live") else excludeTags("live") }
@@ -82,4 +106,10 @@ tasks.register("testLive") {
   description = "Runs only the @Tag(\"live\") tests, against a prepared app. Local only."
   group = "verification"
   dependsOn(tasks.test)
+}
+
+tasks.register("gate") {
+  description = "Build, unit and integration tests, plugin verification. No live tests; the drift check is its own CI job."
+  group = "verification"
+  dependsOn(tasks.build, tasks.verifyPlugin)
 }

@@ -660,11 +660,11 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 - Create: `.github/workflows/ci.yml`, `.github/workflows/release.yml`
 - Modify: `build.gradle.kts` (`gate` task, `verifyPlugin` IDE list, signing and publishing config from env)
 
-- [ ] `gate`: build, unit, integration, `verifyPlugin` (no network drift check)
-- [ ] `verifyPlugin` on IntelliJ IDEA and DataGrip at the minimum version and latest
-- [ ] `ci.yml`: gate and the drift-check job on push and pull request; actions pinned by SHA
-- [ ] `release.yml`: on `v*` tag, sign and `publishPlugin` (secrets `PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`); fails loud when a secret is missing
-- [ ] run `./gradlew gate` locally
+- [x] `gate`: build, unit, integration, `verifyPlugin` (no network drift check). Done: `gate` depends on `build` and `verifyPlugin`; `test` excludes the live tag unless `testLive` is asked for, and a run that asks for `gate` and `testLive` together fails at configuration
+- [x] `verifyPlugin` on IntelliJ IDEA and DataGrip at the minimum version and latest. Done: `IntellijIdea` and `DataGrip` at `platformVersion`, plus `latest` release of both; today the minimum is the latest, so it checks IU-263.7307.200 and DB-263.7307.216 (both Compatible). It found two override-only API usages, now fixed: `createLsp4jClient` subclasses `Lsp4jClient`, and the own quick fix calls `DynoTableCommands` directly instead of reading `commandsCustomizer`
+- [x] `ci.yml`: gate and the drift-check job on push and pull request; actions pinned by SHA. Done: `actions/checkout` v7.0.1, `actions/setup-java` v6.2.0 (Temurin 21), `gradle/actions/setup-gradle` v6.4.1, each by full commit SHA with the tag in a comment; `contents: read`, no persisted credentials; `actionlint` clean
+- [x] `release.yml`: on `v*` tag, sign and `publishPlugin` (secrets `PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`); fails loud when a secret is missing. Done: the first step names each missing secret and fails; then `./gradlew gate publishPlugin` with the Gradle cache off; `build.gradle.kts` reads the signing and publishing values from the same environment variables
+- [x] run `./gradlew gate` locally (300 tests, 0 failed, 0 skipped, no live test; both IDEs Compatible). The `ExplorerTest` flake reproduced once under load; root cause: the harness teardown closed the machine, but the attempt in flight went on (up to 40 s for its report), so a client it had started joined the platform's list after the teardown's stop and connected to the closing fake (a `RejectedExecutionException`, or an LSP listener thread that outlived the test and failed the next tests). Fix: `ConnectMachine.close()` ends the report wait at once, `awaitIdle()` waits for the attempt in flight, and the teardown waits for listed clients to connect before it stops them (the platform's stop of a client whose start thread has not connected yet leaves that connection open). Also fixed a status-before-notification race in a `ConnectTest` case
 
 ### Task 19: Verify acceptance criteria
 

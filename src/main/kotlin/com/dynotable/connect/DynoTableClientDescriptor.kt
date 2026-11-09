@@ -81,8 +81,9 @@ class DynoTableClientDescriptor(
 
   override val lspServerListener = listener
 
-  override fun createLsp4jClient(handler: LspServerNotificationsHandler) =
-    Lsp4jClient(ServerHandler(handler, ConcurrentHashMap<String, List<Diagnostic>>().also { published = it }))
+  // A subclass: the platform marks the constructor override-only, and `verifyPlugin` fails on a direct call.
+  override fun createLsp4jClient(handler: LspServerNotificationsHandler): Lsp4jClient =
+    object : Lsp4jClient(ServerHandler(handler, ConcurrentHashMap<String, List<Diagnostic>>().also { published = it })) {}
 
   override val lspCustomization = DynoTableCustomization()
 }

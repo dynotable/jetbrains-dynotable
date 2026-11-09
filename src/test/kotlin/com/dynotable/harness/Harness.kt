@@ -30,6 +30,7 @@ import com.intellij.openapi.util.SystemInfo
 import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.LspClientManager
 import com.intellij.platform.lsp.api.LspIntegrationProvider
+import com.intellij.platform.lsp.api.LspServerState
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.junit5.fixture.TestFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
@@ -183,7 +184,13 @@ class Harness internal constructor(val project: Project, dir: Path, private val 
   internal suspend fun close() {
     try {
       // As the project's close does: else a stop by the teardown reads as the platform's Stop, and a trigger connects again.
-      project.getServiceIfCreated(ConnectCore::class.java)?.machine?.close()
+      project.getServiceIfCreated(ConnectCore::class.java)?.machine?.let { machine ->
+        machine.close()
+        // Else a client that the attempt in flight started joins the list after the stop, and connects to the closing fake.
+        withTimeoutOrNull(15_000) { machine.awaitIdle() } ?: throw AssertionError("the attempt in flight did not end")
+      }
+      // The platform's stop of a client whose start thread has not connected yet leaves that later connection open.
+      waitFor("the listed clients to connect, now ${clients().map { it.state }}") { clients().none { it.state == LspServerState.Initializing } }
       stopClients()
     } finally {
       apps.forEach { it.close() }

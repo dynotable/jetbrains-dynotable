@@ -121,6 +121,7 @@ class ConnectMachine(
   private val runWaiters = mutableListOf<CompletableDeferred<Unit>>()
   @Volatile
   private var closing = false
+  private val closed = CompletableDeferred<Unit>()
 
   private class Live(val id: Int) {
     var initialized = false
@@ -237,6 +238,15 @@ class ConnectMachine(
   /** The project or the plugin closes: no event starts anything from now on. */
   fun close() {
     closing = true
+    closed.complete(Unit)
+  }
+
+  /**
+   * Waits for the attempt in flight to end. After [close], it ends without a new client, and a client
+   * it already started is in the platform's list, so a stop of the listed clients stops every client.
+   */
+  suspend fun awaitIdle() {
+    withContext(dispatcher) { inFlight }?.join()
   }
 
   private fun ensure(): Job? {
@@ -368,8 +378,14 @@ class ConnectMachine(
       if (!seams.modal()) waited += timeouts.pollMs
       if (waited >= timeouts.listedMs) return Reason.START_FAILED
     }
-    val initialized = withTimeoutOrNull(timeouts.reportMs) { current.report.await() } ?: return Reason.TIMED_OUT
-    if (live !== current) return null
+    // While closing, no event completes the report.
+    val initialized = withTimeoutOrNull(timeouts.reportMs) {
+      select<Boolean> {
+        current.report.onAwait { it }
+        closed.onAwait { false }
+      }
+    } ?: return Reason.TIMED_OUT
+    if (closing || live !== current) return null
     if (!initialized) return Reason.START_FAILED
     connected(id)
     return null

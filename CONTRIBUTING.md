@@ -8,6 +8,7 @@
 
 ```sh
 ./gradlew build      # compile, unit and integration tests, plugin zip
+./gradlew gate       # build and verifyPlugin: the CI check, no live tests
 ./gradlew test       # unit and integration tests (headless, no window opens)
 ./gradlew testLive   # @Tag("live") tests against a prepared DynoTable app, local only
 ./gradlew runIde     # an IDE sandbox with the plugin

@@ -27,6 +27,12 @@ class ProtocolTest {
 
   private fun problem(block: () -> Unit) = assertThrows<ProtocolException>(block).message
 
+  // A port file in a log line or an exception message would give the token to whoever reads the log.
+  @Test
+  fun `a port file prints its port and pid, never its token`() {
+    assertEquals("PortFile(port=41120, pid=111)", PortFile(41120, "s3cret-token", 111).toString())
+  }
+
   // A missing total would read as "unknown" only by accident, and a string count would print as a total.
   @Test
   fun `a missing required key and a wrong primitive type fail`() {

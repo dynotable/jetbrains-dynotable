@@ -668,11 +668,154 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 
 ### Task 19: Verify acceptance criteria
 
-- [ ] every VS Code 0.1.1 feature has its JetBrains form (README list, actions, explorer, results, profiles, settings)
-- [ ] every row of the reference regression map has its counterparts or a written reason
-- [ ] run `./gradlew gate`
-- [ ] run `./gradlew testLive`
+- [x] every VS Code 0.1.1 feature has its JetBrains form (README list, actions, explorer, results, profiles, settings)
+- [x] every row of the reference regression map has its counterparts or a written reason
+- [x] run `./gradlew gate` (2026-11-09, orchestrator: green; fresh `test --rerun` 306 passed, 0 failed, 0 skipped; verifyPlugin IU-263.7307.200 and DB-263.7307.216 Compatible)
+- [x] run `./gradlew testLive` (2026-11-09, orchestrator: 25 passed, 0 failed, 0 skipped, isolated dev build 1.19.1)
 - [ ] manual `runIde` check in IDEA and DataGrip: lens row, Cmd+Enter, Cmd+Shift+Enter, explorer, results, status widget
+
+#### Task 19 results (2026-11-09, read-only audit; no Gradle run)
+
+Sources: vscode-dynotable tag `v0.1.1` (README, `package.json` contributes, CHANGELOG 0.1.0 and 0.1.1).
+After `v0.1.1`, only README and `package.json` changed (0.1.2, 0.1.3: listing text). No test changed.
+
+**Features.** Verdict: each VS Code 0.1.1 feature has its JetBrains form.
+
+| VS Code 0.1.1 | JetBrains form |
+| --- | --- |
+| Languages `*.dynotable.sql`, `.partiql`, `.opensearch`; 2 grammars | File types DynoTable SQL, PartiQL, OpenSearch; TextMate bundle (`TextMateBundle`); SQL uses the bundled `source.sql` |
+| Completion, diagnostics, hover, formatting, alias rename | Platform LSP client (`DynoTableIntegrationProvider`, `DynoTableClientDescriptor`) |
+| Quick fixes | Platform quick fixes; `DynoTableQuickFix` for files outside project content |
+| Plan in the lens row (0.1.1) | `PlanCodeVisionProvider` after Run and Open; platform inlay hints off |
+| Run: lens, `dynotable.run`, Cmd/Ctrl+Enter (`when: dynotable.inScope`) | `DynoTable.Run` (`$default` `control ENTER`), server Run lens through `DynoTableCommands`, `DynoTableActionPromoter` |
+| Open in DynoTable: lens, `dynotable.open`, Cmd/Ctrl+Shift+Enter | `DynoTable.Open` (`control shift ENTER`), server Open lens |
+| Results panel: rows, total, Copy CSV, Copy JSON, Cancel, close cancels, one run | Tool window `DynoTable Results` (bottom) |
+| Explorer view (activity bar), Refresh in the view title | Tool window `DynoTable` (left), toolbar `DynoTable.RefreshExplorer` |
+| Explorer: click a table or index; inline New Query | Double-click or Enter; context menu `DynoTable.NewQuery` |
+| `dynotable.newQuery` | `DynoTable.NewQuery` (scratch file, language popup) |
+| `dynotable.pickIndex` | `DynoTable.PickIndex` |
+| `dynotable.attachSqlFile` | `DynoTable.AttachSqlFile` |
+| `dynotable.selectProfile`; status bar offers it while unbound; choice per workspace | `DynoTable.SelectProfile`; `unbound` status action; `workspace.xml` (`DynoTableWorkspaceSettings`) |
+| `dynotable.reconnect`, `dynotable.openDocs` | `DynoTable.Reconnect`, `DynoTable.OpenDocs`; also reason actions |
+| Validate against the index (code action) | Server code action through the platform intention and `DynoTableCommands` |
+| Stage in DynoTable | Notification action of the `stage-in-app` refusal |
+| Status bar: profile or reason; click shows actions | `StatusWidget` (`DynoTable.Status`) |
+| Command category `DynoTable` | Tools › DynoTable (`DynoTable.Tools`), Find Action |
+| `dynotable.sqlFiles` (resource, default `**/*.dynotable.sql`) | Project setting `sqlFiles` (`.idea/dynotable.xml`, Settings › Tools › DynoTable); default empty: `*.dynotable.sql` is its own file type |
+| `dynotable.appPath`, `dynotable.userDataDir` (machine) | Application settings, roaming off, same page |
+| Background start; Open DynoTable, Download, Set App Path in messages | `Launcher` (setsid detach); reason actions |
+| Untrusted workspace does not run | Status `untrusted`, action Trust Project |
+| Folders, each with its own `sqlFiles` | Each open project has its own `sqlFiles` |
+| Window with no folder | Not applicable: a JetBrains file is always in a project. Scratch files and files outside content are served |
+| Remote workspaces | Not applicable: out of scope in both |
+
+**Reference regression map.** Verdict: complete (the 5 audit gaps are closed, below). Key: CMT `ConnectMachineTest`,
+CT `ConnectTest`, LT `LauncherTest`, DT `DiscoveryTest`, CoT `CommandsTest`, RT `RunTest`, ET `ExplorerTest`,
+PPT `ProfilePickerTest`, LvT `LiveTest`, LLT `LiveLauncherTest`, TT `TokenTest`. "Reason" quotes the task note.
+
+- `protocol.test.ts`: valid value both modes → `ContractTest` each fixture, `ProtocolTest` lenient; lenient/strict
+  extra key → `ProtocolTest` lenient…strict refuses; missing key, wrong type → `ProtocolTest` missing…wrong type.
+- `contract.test.ts`: every fixture in manifest → reason (Task 4: the drift check fails first); guards per
+  fixture → `ContractTest`; `leaks` ×2, `scrub` → reason (recorder stays in vscode-dynotable).
+- `manifest.test.ts`: engines floor → `ManifestTest` since-build; no server command id → reason (Task 2:
+  separate namespaces); grammar paths → `HighlightingTest` colours; machine scope → `SettingsScopeTest`;
+  untrusted → CT untrusted, CMT untrusted.
+- `discovery.test.ts`: userDataDir per OS → DT port file of each OS, userDataDir replaces; Production → DT
+  outside test mode; Development → reason (Task 6: no such mode); Test → DT test mode; no pid → DT no pid
+  reads; truncated, string port → DT truncated; meetsMinimum → DT meetsMinimum; locateApp ×6 → `AppLocatorTest`
+  (one each).
+- `connect-core.test.ts`:
+  - launchEnv allow-list, deny-list → `LaunchEnvTest` ×2; snap → reason (Task 6: no snap branch).
+  - cold start → LT cold start; spawn options → LT cold start (detached, `--headless`, env, cwd home); stale
+    ECONNREFUSED → CMT ECONNREFUSED launches; dead pid ESRCH/EPERM → CMT stale pid, DT stale check; no pid → DT
+    no pid not stale; exit 3/1/signal → LT exit code, CMT launch failure; exit 0 polls → LT after exit 0; exit 0
+    twice → LT not-serving; plain timeout → LT no port file times out; spawn error → LT cannot run; no binary,
+    old app, userDataDir → LT refused launch.
+  - initialize 40 s → CMT preflight 40 s, CMT listed client 40 s; -32898 twice → CMT -32898; signed-out → CMT
+    each preflight outcome; "%s latches %s": closed, refused, other connect error → CMT each preflight outcome;
+    spawn throws → LT cannot run; seam throws → CMT a seam that throws latches start-failed.
+  - ECONNREFUSED after launch → CMT; connection ended → CMT unexpected stop; Reconnect clears latch → CT
+    appPath at Reconnect; Open DynoTable darwin/linux → LT Open macOS, Open elsewhere; Open DynoTable refusals
+    → LT Open refuses.
+  - concurrency: one spawn → CMT concurrent triggers; restart during start → CMT same; restart shows starting
+    → CMT restart does not wait for a command (asserts `Starting`); shared restarts → CMT restart storm; failed
+    restart → CMT same; restart during run → CMT plugin restart waits; latched no respawn → CMT unexpected stop;
+    watcher in-flight, delete, new key clears latch → CMT watcher event; new key during attempt → CMT same;
+    dead-pid after failed launch → CMT same; older attempt latch → CMT same.
+- `reasons.test.ts` → `ReasonsTest` ×2 (`stopped` is the one exception, Task 7).
+- `refusals.test.ts`: unknown code → `RefusalsTest` unknown code (`constructor` row: reason, Task 10); no data →
+  -32803 no data; code → action → each code; stage-in-app → stage for a run only; cancel, closed, stopped → the
+  three silent/status tests.
+- `results-model.test.ts`: summary ×2, cells ×3, CSV ×4 → `ResultsModelTest` (one each); webview nonce, panel
+  messages ×2 → reason (webview only).
+- `media/results.test.ts`: asks the host → reason (no message channel); hostile name and cell → RT hostile
+  column; empty result → RT empty result; cancel with its run id → RT Cancel, RT cancel for another run.
+- `plan-lens.test.ts` ×3 → `PlanLensesTest` ×3.
+- `profiles.test.ts`: bindable row by name, slug and engines → `ProfilesTest` bindable row; incomplete → `ProfilesTest`
+  incomplete; unknown reason → `ProfilesTest` general words; empty roster → `ProfilesTest` empty roster.
+- `explorer-model.test.ts` ×5 → `ExplorerModelTest` ×5.
+- `directive.test.ts`: insert, replace, collapse, unknown tokens, drop target, two targets, incomplete, space →
+  `DirectiveTest` (one each); CRLF/CR → reason (Task 15: a document holds `\n` only).
+- `attach.test.ts`: backslashes → `AttachTest` backslashes; escapes ×4 → `AttachTest` escapes; no folder →
+  `AttachTest` no base dir.
+- `connect.test.ts`:
+  - selectors → CT plain sql file, CT preflight (language ids); capabilities → CT preflight; showMessage
+    count → CT showMessage captured; squatter requests → CoT applyEdit…refused; unbound, -32601 → CT
+    connect-time listing; version gate → CT below minimum; refused start → CT refused token; signed-out → CT
+    signed-out; late close → CT rotated port file; Open DynoTable reaches the spawn seam → CT appPath test
+    (clicks Open DynoTable; the fake app starts with no `--headless`); watcher → CT new port file; restart
+    storm → CT restart storm.
+  - trace sink and storage (the token) → TT no log line and no saved workspace file holds a token (bad token,
+    rotated token, malformed port file, failed preflight; all log categories, plugin debug on; control: a plugin
+    debug line with the token is found; `workspace.xml` holds the profile id and no token); `ProtocolTest` a
+    port file prints its port and pid, never its token.
+- `no-app.test.ts`: reason once → CT command shows the reason once, CoT latched reason; Download, Open
+  Documentation → CT Download; userDataDir → CT userDataDir; appPath → CT appPath.
+- `restored.test.ts`: editor open at activation connects → CT the startup activity connects for a DynoTable
+  file that is already open (after a platform Stop, `RestoredEditors().execute` → `connected`).
+- `no-folder.test.ts`: `*.dynotable.sql` gets didOpen → ET New Query in SQL (a scratch `query.dynotable.sql`
+  outside content, `didOpen` as `sql`), CT partiql outside the project. "No project" itself: not applicable.
+- `workspace-folders.test.ts`: own `sqlFiles`, only inside → `SqlFilesProjectsTest`; outside every folder, no
+  `*.dynotable.sql` hint → `AttachTest` outside base dir; the hint is given on purpose (Task 16: 2026.3 serves
+  such a file outside the project).
+- `editor-commands.test.ts`: New Query SQL → ET New Query in SQL; attach → `AttachSqlFileTest`; Pick Index ×3 →
+  ET Pick Index ×3.
+- `explorer.test.ts`: showing connects, lists → ET showing the explorer; Refresh → ET Refresh; tables first → ET
+  in flight; replaced session → ET drops; unpinnable → ET cannot be pinned; profile change → ET refetches; table
+  click → ET table opens SELECT star; index → ET index opens; unbound → ET unbound.
+- `profiles.test.ts` (integration) ×6 → PPT ×6 (incomplete: not selectable, Task 14).
+- `run.test.ts`: lens Run → RT Run lens click; caret second, at end, outside → `RunTargetTest` ×3, RT caret Run
+  (wiring); refused lens → RT refused lens; pending edit → RT edit pending; plan → RT plan; caret Open → RT caret
+  Open; no Open lens → RT no Open lens; copy → RT Copy CSV; unreadable → RT not a RunResult; selection → RT
+  selection; OpenSearch no range → RT OpenSearch; cancel ×3 → RT Cancel (reason, Task 11: no dialect branch);
+  late answer → reason (Task 11: Cancel cancels the coroutine); stale cancel → RT cancel for another run; one run
+  → RT second Run; panel close → RT removing content; Validate one toast → CoT Validate cold start; refusal copy
+  → RT profile-window-required; stage → RT Stage, `RefusalsTest` stage.
+- `live.test.ts`: profile-required → LvT unbound Run; picker → LvT picker; explorer → LvT explorer; run ×3 → LvT
+  Run in SQL, PartiQL, OpenSearch; refusal copy → LvT Open profile-window-required; cancel ×2 → LvT SQL, PartiQL
+  cancel; quick fix → LvT Use brackets; completion after FROM → LvT completion invoked after FROM lists the seeded
+  tables (runs with `testLive`); GROUP
+  BY → LvT GROUP BY; lens Run → LvT Run lens; Pick Index → LvT Pick Index; Validate → LvT Validate;
+  capabilities ×3 → LvT capability ×3; teardown → LvT client stops mid-run.
+- `live-launcher.test.ts`: cold spawn → LLT no app; nudge → LLT second headless launch; killed → LLT SIGKILL;
+  integration-off → LLT exits 3.
+- `live-launcher-reuse-1/2.test.ts` → LLT no app (the app outlives the client, Reconnect spawns nothing);
+  second IDE process: reason (Task 17: one JVM).
+- `live-coordinated.test.ts`: quit → LLT app quit; killed → LLT SIGKILL; restarted → LLT quits and starts
+  again; integration-off switch, signed-out → reason (Task 17: needs the app's own switch; this build cannot
+  sign out).
+- `live-version.test.ts` → LLT older than the minimum.
+
+Checked known items: "platform Restart while latched connects nothing" → covered: CMT "…but while latched it
+stops the client" (the rule), CT "the app quits … no client stays" (no client is left to restart). "Open
+DynoTable reaches the spawn seam" → covered by the CT appPath test. No-folder → covered (above).
+
+**Open gaps**: none. The 5 audit gaps are closed (see the map above).
+
+**Bug found by the live run** (DynamoDB Local down): a run that the server refused with an empty `message`
+posted a DynoTable notification with no text, which the platform refuses (`Notification should have title
+and/or content`). Fix: `notify` shows "DynoTable could not complete the request." for a blank text. Test: RT
+a run refused with an empty message shows our general sentence.
 
 ### Task 20: [Final] Update documentation
 

@@ -202,6 +202,19 @@ class ConnectTest {
     assertTrue(connected() > attempt)
   }
 
+  // An editor that the IDE restores at startup fires no file-open event; without the activity it stays unserved.
+  @Test
+  fun `the startup activity connects for a DynoTable file that is already open`() = run {
+    h.fake.start()
+    open("restored.partiql")
+    connected()
+    // After a platform Stop, no other trigger connects.
+    h.platformStop(h.clients().single())
+    h.awaitStatus(Status.Disconnected(Reason.STOPPED))
+    RestoredEditors().execute(project.get())
+    connected()
+  }
+
   // An app the user quit must never come back invisibly, and no red "Terminated" client stays.
   @Test
   fun `the app quits - connection-ended, the next file open spawns nothing, and no client stays`() = run {

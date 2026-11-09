@@ -361,6 +361,24 @@ class LiveTest {
     assertEquals("SELECT * FROM \"$ORDERS\" WHERE \"status\" IN ['a']", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 
+  // The buffer holds no table name, so only the server's own listing can offer them.
+  @Test
+  fun `completion invoked after FROM lists the seeded tables`() = run {
+    live.bind()
+    opened("from.dynotable.sql", "SELECT * FROM <caret>")
+    var items = emptyList<String>()
+    runCatching {
+      waitFor("the tables among the items", START_MS) {
+        items = withContext(Dispatchers.EDT) {
+          fixture.completeBasic()
+          fixture.lookupElements.orEmpty().map { LookupElementPresentation.renderElement(it).itemText.orEmpty() }
+        }
+        items.containsAll(listOf(ORDERS, CUSTOMERS))
+      }
+    }
+    assertTrue(items.containsAll(listOf(ORDERS, CUSTOMERS)), "$items")
+  }
+
   @Test
   fun `SQL GROUP BY customerId answers the columns customerid and COUNT`() = run {
     live.bind()

@@ -67,7 +67,9 @@ import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.InlayHint
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.Either
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -584,6 +586,17 @@ class RunTest {
     delay(300)
     val message = h.fake.fixture("error-profile-window-required.json").asJsonObject["message"].asString
     assertEquals(listOf(StringUtil.escapeXmlEntities(message)), h.sentences())
+  }
+
+  // A failed run with an empty message (seen with the database down) must still tell the user something.
+  @Test
+  fun `a run refused with an empty message shows our general sentence`() = run {
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw ResponseErrorException(ResponseError(-32803, "", mapOf("code" to "run-failed"))) }
+    h.fake.start()
+    val editor = open("empty.partiql", "SELECT * FROM \"orders\"")
+    runIn(editor)
+    waitFor("a notification") { h.notifications.isNotEmpty() }
+    assertEquals(listOf("DynoTable could not complete the request."), h.sentences())
   }
 
   // The server runs no PartiQL write; Stage opens the app on the same statement, or the whole document.

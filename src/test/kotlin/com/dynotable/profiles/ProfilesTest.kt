@@ -12,6 +12,13 @@ class ProfilesTest {
 
   private fun item(row: ProfileRow) = (pickerOf(listOf(row)) as Picker.Pick).items.single()
 
+  // The user tells profiles apart by name, slug and engines, and must be able to bind this one.
+  @Test
+  fun `shows a bindable row by name, slug and engines, with nothing refused`() {
+    val item = item(row().copy(engines = Engines(dynamodb = true, opensearch = true)))
+    assertEquals(listOf("Production", "production — DynamoDB, OpenSearch", null), listOf(item.text, item.detail, item.refusal))
+  }
+
   // An empty popup tells the user nothing.
   @Test
   fun `tells an empty roster to create a profile in DynoTable`() {

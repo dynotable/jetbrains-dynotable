@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.io.IOException
 
 private val STALE = PortFile(41120, "old", 111)
 private val FRESH = PortFile(41121, "new", 222)
@@ -148,6 +149,15 @@ class ConnectMachineTest {
     val machine = machine(world)
     machine.ensureConnected()
     assertEquals(latched(Reason.INTEGRATION_OFF), machine.status)
+  }
+
+  // Else the status stays starting while nothing runs, and no trigger tries again.
+  @Test
+  fun `a seam that throws latches start-failed`() = runTest {
+    val world = World(file = null, launch = { throw IOException("no such file") })
+    val machine = machine(world)
+    machine.ensureConnected()
+    assertEquals(latched(Reason.START_FAILED), machine.status)
   }
 
   @Test

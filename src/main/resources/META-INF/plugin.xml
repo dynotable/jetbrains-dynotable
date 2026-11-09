@@ -46,6 +46,7 @@
                 factoryClass="com.dynotable.results.ResultsToolWindowFactory"/>
     <actionPromoter implementation="com.dynotable.run.DynoTableActionPromoter"/>
     <postStartupActivity implementation="com.dynotable.connect.RestoredEditors"/>
+    <codeInsight.codeVisionProvider implementation="com.dynotable.editor.PlanCodeVisionProvider"/>
     <platform.lsp.integrationProvider implementation="com.dynotable.connect.DynoTableIntegrationProvider"/>
 
     <projectConfigurable parentId="tools" id="com.dynotable.settings" displayName="DynoTable" nonDefaultProject="true"

@@ -1,5 +1,6 @@
 package com.dynotable.connect
 
+import com.dynotable.editor.PlanCodeVisionProvider
 import com.dynotable.files.DynoTableFileType
 import com.dynotable.protocol.PortFile
 import com.dynotable.refusals.notify
@@ -121,6 +122,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
     override fun onStatus(status: Status) {
       ApplicationManager.getApplication().invokeLater({
         WindowManager.getInstance().getStatusBar(project)?.updateWidget(StatusWidget.ID)
+        PlanCodeVisionProvider.refresh(project)
       }, project.disposed)
       if (status is Status.Disconnected && status.reason.latched) notify(status.reason)
     }
@@ -158,6 +160,13 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
       else -> notify(project, "DynoTable is reconnecting. Try again shortly.", NotificationType.INFORMATION)
     }
     return null
+  }
+
+  /** The current session's client, with no connect; `null` while nothing serves. */
+  fun serving(): LspClient? = when (val status = machine.status) {
+    is Status.Connected -> clientOf(status.attempt)
+    is Status.Unbound -> clientOf(status.attempt)
+    else -> null
   }
 
   /**

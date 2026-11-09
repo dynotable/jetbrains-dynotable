@@ -21,11 +21,11 @@ sealed interface FakeRun {
 }
 
 /**
- * A shell script at `<dir>/dynotable` that stands in for the app binary (POSIX only). Start `n`
+ * A shell script at `<dir>/<name>` that stands in for the app binary (POSIX only). Start `n`
  * records its argv, environment, physical cwd, pid and process group, then does `runs[n - 1]`.
  */
-class FakeApp(dir: Path, runs: List<FakeRun>, executable: Boolean = true) : AutoCloseable {
-  val binary: Path = dir.createDirectories().resolve("dynotable")
+class FakeApp(dir: Path, runs: List<FakeRun>, executable: Boolean = true, name: String = "dynotable") : AutoCloseable {
+  val binary: Path = dir.createDirectories().resolve(name)
   private val records = dir.resolve("records").createDirectories()
 
   init {

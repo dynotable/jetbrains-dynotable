@@ -504,13 +504,13 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 **Files:**
 - Create: `src/main/kotlin/com/dynotable/connect/Discovery.kt`, `AppLocator.kt`, `LaunchEnv.kt`, tests
 
-- [ ] port-file path per OS (macOS, Windows `%APPDATA%`, Linux `XDG_CONFIG_HOME`), replaced by `userDataDir`, and in test mode by the test user-data dir
-- [ ] port-file parse and stale check (Technical Details)
-- [ ] app locator per OS, replaced by `appPath` and, in test mode, by the test app root: macOS `.app` or inner binary → `Info.plist` version; Windows newest `app-*` folder (Squirrel), half-installed folder skipped, beta name; Linux path
-- [ ] `meetsMinimum` (pre-release and non-semver versions); `launchEnv` (allow-list on macOS/Linux, deny-list on Windows ignoring case; no snap branch)
-- [ ] minimum-version override for tests and live tests (a test-mode-only property, as `DYNOTABLE_MIN_APP_VERSION`); ignored outside test mode
-- [ ] write tests from `discovery.test.ts` and the pure `connect-core.test.ts` cases: the min-version override is ignored outside test mode; other-user or empty-user `pid` on macOS/Linux → stale; Windows alive `pid` → not stale; no `pid` → connect; truncated file and string `port` → not a port file; `app-1.10.0` over `app-1.9.0`; half-installed folder; plist version; pre-release versions; allow-list drops `AWS_PROFILE` and `NODE_OPTIONS`; Windows deny-list ignores case; port-file path per OS; the test seams do nothing outside test mode
-- [ ] run tests
+- [x] port-file path per OS (macOS, Windows `%APPDATA%`, Linux `XDG_CONFIG_HOME`), replaced by `userDataDir`, and in test mode by the test user-data dir
+- [x] port-file parse and stale check (Technical Details). Done: `Fs.Local` reads with `java.nio`; a missing, truncated or malformed file is `null`
+- [x] app locator per OS, replaced by `appPath` and, in test mode, by the test app root: macOS `.app` or inner binary → `Info.plist` version; Windows newest `app-*` folder (Squirrel), half-installed folder skipped, beta name; Linux path
+- [x] `meetsMinimum` (pre-release and non-semver versions); `launchEnv` (allow-list on macOS/Linux, deny-list on Windows ignoring case; no snap branch). Done: versions compare with the platform's `com.intellij.util.text.SemVer` (no own semver)
+- [x] minimum-version override for tests and live tests (a test-mode-only property, as `DYNOTABLE_MIN_APP_VERSION`); ignored outside test mode. Done: `Overrides.of(testMode, property)` with the system properties `dynotable.test.userDataDir`, `dynotable.test.appRoot`, `dynotable.test.minAppVersion`; Task 9 passes `isUnitTestMode` as `testMode`
+- [x] write tests from `discovery.test.ts` and the pure `connect-core.test.ts` cases: the min-version override is ignored outside test mode; other-user or empty-user `pid` on macOS/Linux → stale; Windows alive `pid` → not stale; no `pid` → connect; truncated file and string `port` → not a port file; `app-1.10.0` over `app-1.9.0`; half-installed folder; plist version; pre-release versions; allow-list drops `AWS_PROFILE` and `NODE_OPTIONS`; Windows deny-list ignores case; port-file path per OS; the test seams do nothing outside test mode. Done: `DiscoveryTest`, `AppLocatorTest`, `LaunchEnvTest`; also a real-`ProcessHandle` check that the own live process is not stale and an ended one is (skipped on Windows). Not ported: the snap restore (no snap branch, as planned) and the Development-mode row of `overrides` (no such mode here)
+- [x] run tests
 
 ### Task 7: Launcher
 

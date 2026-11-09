@@ -29,6 +29,12 @@ dependencies {
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.opentest4j:opentest4j:1.3.0")
+  // Virtual time for the connect rules. The IDE brings its own coroutines core of the same version.
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0") {
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-bom")
+  }
 }
 
 intellijPlatform {

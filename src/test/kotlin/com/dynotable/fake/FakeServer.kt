@@ -88,6 +88,12 @@ class FakeServer(
   @Volatile
   var ignoreOpens = false
 
+  /** Holds each run until [releaseRuns] or its cancel. */
+  @Volatile
+  var holdRuns = false
+
+  private val held: MutableSet<HeldRun> = ConcurrentHashMap.newKeySet()
+
   /** The params of every `initialize`, also a refused one. */
   val initializeParams = CopyOnWriteArrayList<JsonElement>()
 
@@ -128,6 +134,9 @@ class FakeServer(
       e.cause
     }
   }
+
+  /** Answers every held run with its rows. */
+  fun releaseRuns() = held.toList().forEach { it.answer() }
 
   /** The sessions that sent `initialized`: platform sessions. The preflight never sends it. */
   fun platformSessions(): Int = received.count { it.method == "initialized" }
@@ -186,6 +195,8 @@ class FakeServer(
       .setInput(socket.getInputStream())
       .setOutput(socket.getOutputStream())
       .setExecutorService(executor)
+      // As the app: a fixture's `"totalRows": null` stays on the wire; Gson drops null members by default.
+      .configureGson { it.serializeNulls() }
       // The wrapper applies to both directions; only the consumer of incoming messages is the endpoint.
       .wrapMessages { next -> if (next is RemoteEndpoint) recording(session, next) else next }
       .create()
@@ -217,7 +228,10 @@ class FakeServer(
 
   private fun endpoint(session: Session) = object : Endpoint {
     override fun request(method: String, parameter: Any?): CompletableFuture<*> = try {
-      CompletableFuture.completedFuture(request(session, method, json(parameter)))
+      when (val answer = request(session, method, json(parameter))) {
+        is HeldRun -> answer
+        else -> CompletableFuture.completedFuture(answer)
+      }
     } catch (e: ResponseErrorException) {
       CompletableFuture.failedFuture<Any?>(e)
     }
@@ -260,7 +274,7 @@ class FakeServer(
     if (uri == null || !opened(uri)) fail(ResponseErrorCode.RequestFailed.value, "No open DynoTable document at $uri. Open the file before running it.", runFailed())
     val dialect = languages[uri].takeIf { it == "partiql" || it == "opensearch" } ?: "sql"
     return when (val command = params["command"].asString) {
-      "dynotable.runStatement" -> fixture("run-$dialect.json")
+      "dynotable.runStatement" -> if (holdRuns) HeldRun(dialect) else fixture("run-$dialect.json")
       "dynotable.openInApp" -> null
       "dynotable.validateQuery" -> {
         session.remote.notify("window/showMessage", fixture("validate-query-message.json"))
@@ -283,6 +297,25 @@ class FakeServer(
           add("diagnostics", JsonArray())
         })
       }
+    }
+  }
+
+  /** lsp4j cancels the future of a request on its `$/cancelRequest`; then the run answers as the app's does. */
+  private inner class HeldRun(private val dialect: String) : CompletableFuture<Any?>() {
+    init {
+      held += this
+    }
+
+    fun answer() {
+      held -= this
+      complete(fixture("run-$dialect.json"))
+    }
+
+    override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
+      held -= this
+      // As the app: a cancelled run fails, in every dialect.
+      completeExceptionally(refusal("error-cancel-${if (dialect == "sql") "sql" else "partiql"}.json"))
+      return false
     }
   }
 

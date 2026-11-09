@@ -42,6 +42,9 @@
 
     <statusBarWidgetFactory id="DynoTable.Status" implementation="com.dynotable.ui.StatusWidgetFactory"/>
     <notificationGroup id="DynoTable" displayType="BALLOON"/>
+    <toolWindow id="DynoTable Results" anchor="bottom" canCloseContents="true" icon="/icons/dynotable.svg"
+                factoryClass="com.dynotable.results.ResultsToolWindowFactory"/>
+    <actionPromoter implementation="com.dynotable.run.DynoTableActionPromoter"/>
     <postStartupActivity implementation="com.dynotable.connect.RestoredEditors"/>
     <platform.lsp.integrationProvider implementation="com.dynotable.connect.DynoTableIntegrationProvider"/>
 
@@ -58,6 +61,10 @@
   </projectListeners>
 
   <actions>
+    <action id="DynoTable.Run" class="com.dynotable.run.RunAction" text="Run DynoTable Query"
+            description="Run the selection, else the statement at the caret, else the whole file">
+      <keyboard-shortcut keymap="$default" first-keystroke="control ENTER"/>
+    </action>
     <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
             description="Connect to DynoTable again"/>
     <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"

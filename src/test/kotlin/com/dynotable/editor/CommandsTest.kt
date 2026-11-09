@@ -159,6 +159,8 @@ class CommandsTest {
   fun `a command shows the latched reason exactly once more`() = run {
     val file = open("q.opensearch", "{}")
     h.awaitStatus(Status.Disconnected(Reason.NOT_INSTALLED))
+    // The status changes before its notification is posted.
+    waitFor("the latch's notification") { h.notifications.isNotEmpty() }
     assertEquals(listOf(Reason.NOT_INSTALLED.sentence), h.sentences())
     assertNull(commands.send(file, VALIDATE_QUERY, args(file)))
     delay(500)

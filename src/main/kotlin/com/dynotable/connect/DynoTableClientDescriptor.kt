@@ -45,8 +45,13 @@ class DynoTableClientDescriptor(
   private val file: PortFile,
   private val listener: LspServerListener,
 ) : ProjectWideLspClientDescriptor(project, "DynoTable") {
-  /** The URIs the server published diagnostics for in this session: it does so for every document it opened. */
-  val published: MutableSet<String> = ConcurrentHashMap.newKeySet()
+  /**
+   * The URIs the server published diagnostics for in the current session: it does so for every
+   * document it opened. The platform's Restart starts a new session on this descriptor.
+   */
+  @Volatile
+  var published: Set<String> = emptySet()
+    private set
 
   override fun isSupportedFile(file: VirtualFile) = file.fileType is DynoTableFileType
 
@@ -64,7 +69,8 @@ class DynoTableClientDescriptor(
 
   override val lspServerListener = listener
 
-  override fun createLsp4jClient(handler: LspServerNotificationsHandler) = Lsp4jClient(ServerHandler(handler, published))
+  override fun createLsp4jClient(handler: LspServerNotificationsHandler) =
+    Lsp4jClient(ServerHandler(handler, ConcurrentHashMap.newKeySet<String>().also { published = it }))
 
   override val lspCustomization = DynoTableCustomization()
 }

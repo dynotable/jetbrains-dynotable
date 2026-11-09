@@ -480,11 +480,11 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 **Files:**
 - Create: `src/main/kotlin/com/dynotable/protocol/Protocol.kt`, `src/test/kotlin/.../ProtocolTest.kt`, `ContractTest.kt`
 
-- [ ] Kotlin types for `ProfileRow`, `ListTablesResult`, `ListIndicesResult`, `CommandArgs`, `RunResult`, port file; conversion from a decoded `Object` tree or `JsonElement`; lsp4j types for `initializeResult`, `codeLensList`, `progressList`, `showMessage`, `responseError`
-- [ ] validation as in Technical Details › Parsing; JavaScript number formatting
-- [ ] write a contract test: every `contract/` fixture parses by its manifest shape, with a strict check per fixture (a fixture key with no Kotlin field fails, so a misnamed optional field such as `itemsScanned` is seen)
-- [ ] write protocol tests: missing `totalRows` fails; `returnedRows: "1"` fails; an extra key and `kind: "serverless"`, a new `reason`, a new `data.code` are accepted; a `Double` `1.0` from the decoded tree formats as `1`; `1e21` formats as `1e+21`
-- [ ] run tests
+- [x] Kotlin types for `ProfileRow`, `ListTablesResult`, `ListIndicesResult`, `CommandArgs`, `RunResult`, port file; conversion from a decoded `Object` tree or `JsonElement`; lsp4j types for `initializeResult`, `codeLensList`, `progressList`, `showMessage`, `responseError`. Done: `protocol/Protocol.kt`; the five lsp4j shapes use the lsp4j classes as decoded by the platform's `MessageJsonHandler` Gson (no own type)
+- [x] validation as in Technical Details › Parsing; JavaScript number formatting
+- [x] write a contract test: every `contract/` fixture parses by its manifest shape, with a strict check per fixture (a fixture key with no Kotlin field fails, so a misnamed optional field such as `itemsScanned` is seen). Done: own types parse with `strict = true`; lsp4j types must round-trip through the lsp4j Gson unchanged; lens arguments and `responseError.data` also parse strictly. Checked by mutation: a renamed `itemsScanned`, an extra `initialize` capability and a misspelt `data.code` each fail. Not ported: `contract.test.ts` "lists every fixture file in the manifest": the drift check already fails on a fixture that upstream does not have
+- [x] write protocol tests: missing `totalRows` fails; `returnedRows: "1"` fails; an extra key and `kind: "serverless"`, a new `reason`, a new `data.code` are accepted; a `Double` `1.0` from the decoded tree formats as `1`; `1e21` formats as `1e+21`. Done: also strict refuses each of the lenient cases (else the contract test sees no drift); the number test has one row per branch of the JavaScript rule
+- [x] run tests
 
 ### Task 5: File types, TextMate highlighting and settings
 

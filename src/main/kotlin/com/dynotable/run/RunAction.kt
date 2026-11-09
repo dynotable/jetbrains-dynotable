@@ -15,7 +15,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 
-/** What the user asked to run, read when the action ran: a later edit must not change it. */
+/** What the user asked to run or open, read when the action ran: a later edit must not change it. */
 data class RunRequest(
   val file: VirtualFile,
   val document: Document,
@@ -51,10 +51,13 @@ class RunAction : DumbAwareAction() {
   }
 }
 
-/** In a DynoTable file the shortcut runs the query; elsewhere it keeps Split Line and the IDE's own Execute. */
+/**
+ * In a DynoTable file the shortcuts run and open the query; elsewhere they keep Split Line, Complete
+ * Current Statement and the IDE's own Execute.
+ */
 class DynoTableActionPromoter : ActionPromoter {
   override fun promote(actions: List<AnAction>, context: DataContext): List<AnAction> {
     if (context.getData(CommonDataKeys.EDITOR)?.virtualFile?.fileType !is DynoTableFileType) return emptyList()
-    return actions.filterIsInstance<RunAction>()
+    return actions.filter { it is RunAction || it is OpenAction }
   }
 }

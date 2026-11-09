@@ -48,7 +48,7 @@ class Session internal constructor(val socket: Socket) {
     internal set
 }
 
-/** Answers a request with a JSON-encodable value, or throws [ResponseErrorException]. */
+/** Answers a request with a JSON-encodable value or a future of one, or throws [ResponseErrorException]. */
 typealias Handler = (params: JsonElement, session: Session) -> Any?
 
 /** A message from an initialized session. [id] is set for a request. */
@@ -229,7 +229,8 @@ class FakeServer(
   private fun endpoint(session: Session) = object : Endpoint {
     override fun request(method: String, parameter: Any?): CompletableFuture<*> = try {
       when (val answer = request(session, method, json(parameter))) {
-        is HeldRun -> answer
+        // A handler can answer later, as a held run does.
+        is CompletableFuture<*> -> answer
         else -> CompletableFuture.completedFuture(answer)
       }
     } catch (e: ResponseErrorException) {

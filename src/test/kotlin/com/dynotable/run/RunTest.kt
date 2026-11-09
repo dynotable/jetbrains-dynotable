@@ -1,10 +1,13 @@
 package com.dynotable.run
 
 import com.dynotable.editor.CHANGED
+import com.dynotable.editor.NO_OPEN
+import com.dynotable.editor.OPEN_CHANGED
 import com.dynotable.editor.ServerCommands
 import com.dynotable.editor.UNREADABLE
 import com.dynotable.harness.harnessFixture
 import com.dynotable.harness.waitFor
+import com.dynotable.refusals.OPEN_IN_APP
 import com.dynotable.refusals.RUN_STATEMENT
 import com.dynotable.results.BUSY
 import com.dynotable.results.RESULTS_TOOL_WINDOW
@@ -65,14 +68,16 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
 import java.awt.datatransfer.DataFlavor
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.JLabel
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import javax.swing.plaf.basic.BasicHTML
+import kotlin.concurrent.thread
 import kotlin.time.Duration.Companion.minutes
 
-/** Run, its results tool window and its shortcut, against the fake server. */
+/** Run, Open in DynoTable, Stage, the results tool window and the shortcuts, against the fake server. */
 @TestApplication
 @DisabledOnOs(OS.WINDOWS)
 class RunTest {
@@ -104,6 +109,23 @@ class RunTest {
 
   private suspend fun caret(editor: Editor, line: Int, column: Int) =
     withContext(Dispatchers.EDT) { editor.caretModel.moveToOffset(editor.document.getLineStartOffset(line) + column) }
+
+  private suspend fun openIn(editor: Editor) = ServerCommands.getInstance(project.get()).open(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+
+  private fun opens() = h.fake.received.filter { it.method == "workspace/executeCommand" && it.params.asJsonObject["command"].asString == OPEN_IN_APP }
+
+  private fun lastOpen(): JsonElement = opens().last().params.asJsonObject["arguments"].asJsonArray[0]
+
+  /** Without its Code Vision, the platform sends no lens request of its own to the fake's handler. */
+  private suspend fun withoutCodeVision(block: suspend () -> Unit) {
+    val settings = CodeVisionSettings.getInstance()
+    settings.codeVisionEnabled = false
+    try {
+      block()
+    } finally {
+      settings.codeVisionEnabled = true
+    }
+  }
 
   private fun runs() = h.fake.received.filter { it.method == "workspace/executeCommand" && it.params.asJsonObject["command"].asString == RUN_STATEMENT }
 
@@ -183,10 +205,7 @@ class RunTest {
   // The lens range is for the text before the edit; there it selects the first statement.
   @Test
   fun `an edit while the lens request is pending runs nothing`() = run {
-    // Else the platform's own lens requests reach the handler too.
-    val settings = CodeVisionSettings.getInstance()
-    settings.codeVisionEnabled = false
-    try {
+    withoutCodeVision {
       h.fake.start()
       val editor = open("edited.dynotable.sql")
       caret(editor, 1, 5)
@@ -197,8 +216,6 @@ class RunTest {
         runLenses(params)
       }
       runIn(editor)
-    } finally {
-      settings.codeVisionEnabled = true
     }
     assertEquals(0, runs().size)
     assertEquals(listOf(CHANGED), h.sentences())
@@ -425,13 +442,129 @@ class RunTest {
 
   // As the IDE picks the action for a keystroke: the keymap's actions, then the promoters, then the first enabled one.
   @Test
-  fun `Cmd+Enter in a DynoTable file runs, and in a plain file splits the line`() = run {
-    for ((n, keymap, keystroke) in listOf(Triple(1, "\$default", "control ENTER"), Triple(2, "Mac OS X 10.5+", "meta ENTER"))) {
+  fun `Cmd+Enter and Cmd+Shift+Enter run and open in a DynoTable file, and elsewhere split the line and complete the statement`() = run {
+    for ((n, keymap, modifier) in listOf(Triple(1, "\$default", "control"), Triple(2, "Mac OS X 10.5+", "meta"))) {
+      fun ids(keystroke: String) = KeymapManagerEx.getInstanceEx().getKeymap(keymap)!!
+        .getActionIdList(KeyboardShortcut(KeyStroke.getKeyStroke("$modifier $keystroke"), null))
+      val enter = ids("ENTER")
+      val shiftEnter = ids("shift ENTER")
       // A second file of the same name would be renamed, and so lose its file type.
-      val ids = KeymapManagerEx.getInstanceEx().getKeymap(keymap)!!.getActionIdList(KeyboardShortcut(KeyStroke.getKeyStroke(keystroke), null))
-      assertEquals("DynoTable.Run", firstEnabled(open("$n.dynotable.sql"), ids), keymap)
-      assertEquals("EditorSplitLine", firstEnabled(open("$n.txt"), ids), keymap)
+      val query = open("$n.dynotable.sql")
+      assertEquals("DynoTable.Run", firstEnabled(query, enter), keymap)
+      assertEquals("DynoTable.Open", firstEnabled(query, shiftEnter), keymap)
+      val plain = open("$n.txt")
+      assertEquals("EditorSplitLine", firstEnabled(plain, enter), keymap)
+      assertEquals("EditorCompleteStatement", firstEnabled(plain, shiftEnter), keymap)
+      // The server refuses Open for every opensearch document.
+      assertEquals("EditorCompleteStatement", firstEnabled(open("$n.opensearch"), shiftEnter), keymap)
     }
+  }
+
+  // The server decides which statements get Open and with what arguments; the shortcut reuses them.
+  @Test
+  fun `caret Open sends the Open lens argument of the statement at the caret`() = run {
+    h.fake.handle("textDocument/codeLens") { params, _ -> openLenses(params) }
+    h.fake.start()
+    val editor = open("caret-open.dynotable.sql")
+    caret(editor, 1, 5)
+    openIn(editor)
+    val expected = Gson().toJsonTree(mapOf("uri" to editor.virtualFile!!.url, "range" to line(1, 26), "seedStatement" to true))
+    assertEquals(expected, lastOpen())
+  }
+
+  // Without a lens, an Open of the whole document would open a statement the user did not point at.
+  @Test
+  fun `caret Open on a statement with no Open lens says so and sends nothing`() = run {
+    start()
+    val editor = open("no-open.dynotable.sql")
+    caret(editor, 0, 5)
+    openIn(editor)
+    assertEquals(0, opens().size)
+    assertEquals(listOf(NO_OPEN), h.sentences())
+  }
+
+  // The lens range is for the text before the edit; there it selects another statement.
+  @Test
+  fun `an edit while the Open lens request is pending opens nothing`() = run {
+    withoutCodeVision {
+      h.fake.start()
+      val editor = open("open-edited.dynotable.sql")
+      caret(editor, 1, 5)
+      h.fake.handle("textDocument/codeLens") { params, _ ->
+        ApplicationManager.getApplication().invokeAndWait {
+          WriteCommandAction.runWriteCommandAction(project.get()) { editor.document.insertString(0, "SELECT 1;\n") }
+        }
+        openLenses(params)
+      }
+      openIn(editor)
+    }
+    assertEquals(0, opens().size)
+    assertEquals(listOf(OPEN_CHANGED), h.sentences())
+  }
+
+  // `openInApp` answers `null`; a stopped client also gives `null`, and its pending requests never complete.
+  @Test
+  fun `a session that drops after the Open lens answer shows the reason, never a success`() = run {
+    withoutCodeVision {
+      h.fake.start()
+      val editor = open("dropped.dynotable.sql")
+      caret(editor, 1, 5)
+      connected()
+      h.fake.handle("textDocument/codeLens") { params, session ->
+        CompletableFuture<Any?>().also { answer ->
+          thread {
+            // After the handler returns, so the answer is written before the socket closes.
+            Thread.sleep(100)
+            answer.complete(openLenses(params))
+            session.socket.close()
+          }
+        }
+      }
+      withTimeout(10_000) { openIn(editor) }
+    }
+    h.awaitStatus(Status.Disconnected(Reason.CONNECTION_ENDED))
+    delay(300)
+    assertEquals(0, opens().size)
+    val sentences = h.sentences()
+    assertTrue(sentences.isNotEmpty() && sentences.all { it == Reason.CONNECTION_ENDED.sentence }, "$sentences")
+  }
+
+  @Test
+  fun `profile-window-required on Open shows the server sentence once`() = run {
+    h.fake.handle("textDocument/codeLens") { params, _ -> openLenses(params) }
+    h.fake.handle("command:$OPEN_IN_APP") { _, _ -> throw h.fake.refusal("error-profile-window-required.json") }
+    h.fake.start()
+    val editor = open("window.dynotable.sql")
+    caret(editor, 1, 5)
+    openIn(editor)
+    delay(300)
+    val message = h.fake.fixture("error-profile-window-required.json").asJsonObject["message"].asString
+    assertEquals(listOf(StringUtil.escapeXmlEntities(message)), h.sentences())
+  }
+
+  // The server runs no PartiQL write; Stage opens the app on the same statement, or the whole document.
+  @Test
+  fun `Stage sends openInApp with the refused run's range, or only its uri when the run had none`() = run {
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw h.fake.refusal("error-stage-in-app.json") }
+    // No lens: a Run with no selection sends no range.
+    h.fake.start()
+    val editor = open("stage.partiql", "INSERT INTO \"orders\" VALUE {'orderId': 'x'}")
+    val uri = editor.virtualFile!!.url
+    val message = StringUtil.escapeXmlEntities(h.fake.fixture("error-stage-in-app.json").asJsonObject["message"].asString)
+    withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 10) }
+    runIn(editor)
+    assertEquals(listOf(message), h.sentences())
+    h.click(h.notifications.last(), "Stage in DynoTable")
+    waitFor("the Stage") { opens().size == 1 }
+    assertEquals(Gson().toJsonTree(mapOf("uri" to uri, "range" to line(0, 10))), lastOpen())
+
+    withContext(Dispatchers.EDT) { editor.selectionModel.removeSelection() }
+    runIn(editor)
+    h.click(h.notifications.last(), "Stage in DynoTable")
+    waitFor("the second Stage") { opens().size == 2 }
+    assertEquals(Gson().toJsonTree(mapOf("uri" to uri)), lastOpen())
+    delay(300)
+    assertEquals(listOf(message, message), h.sentences())
   }
 
   private suspend fun firstEnabled(editor: Editor, ids: List<String>): String? = withContext(Dispatchers.EDT) {
@@ -450,6 +583,13 @@ class RunTest {
     fun line(n: Int, length: Int) = Range(Position(n, 0), Position(n, length))
 
     fun range(range: Range): JsonElement = Gson().toJsonTree(range)
+
+    /** The Run lenses, and an Open lens with a `seedStatement` on the second statement only. */
+    fun openLenses(params: JsonElement): List<CodeLens> {
+      val uri = params.asJsonObject["textDocument"].asJsonObject["uri"].asString
+      val open = mapOf("uri" to uri, "range" to line(1, 26), "seedStatement" to true)
+      return runLenses(params) + CodeLens(line(1, 0), Command("Open in DynoTable", OPEN_IN_APP, listOf(open)), null)
+    }
 
     fun runLenses(params: JsonElement): List<CodeLens> {
       val uri = params.asJsonObject["textDocument"].asJsonObject["uri"].asString

@@ -42,6 +42,8 @@ import java.util.concurrent.CompletableFuture
 
 const val NOT_OPENED = "DynoTable has not opened this file. Close and open the file, then try again."
 const val CHANGED = "The query changed before the run started. Run it again."
+const val OPEN_CHANGED = "The query changed before DynoTable opened it. Try again."
+const val NO_OPEN = "DynoTable cannot open this statement. Put the cursor in a statement that shows Open in DynoTable."
 const val UNREADABLE = "DynoTable answered with a result the plugin cannot read."
 private const val CODE_LENS = "textDocument/codeLens"
 private val gson = Gson()
@@ -77,12 +79,14 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
       runStatement(client, file, args.first())
       return null
     }
-    return try {
-      Answer(request(client, holdsRestart = false) { it.workspaceService.executeCommand(ExecuteCommandParams(command, args)) })
-    } catch (e: CommandFailed) {
-      report(file, e.failure, command, args)
-      null
-    }
+    return command(client, file, command, args)
+  }
+
+  private suspend fun command(client: LspClient, file: VirtualFile, command: String, args: List<Any?>): Answer? = try {
+    Answer(request(client, holdsRestart = false) { it.workspaceService.executeCommand(ExecuteCommandParams(command, args)) })
+  } catch (e: CommandFailed) {
+    report(file, e.failure, command, args)
+    null
   }
 
   /** For a caller on the EDT, which must not wait. */
@@ -99,21 +103,47 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
       args.add("range", gson.toJsonTree(request.selection))
     } else if (request.file.fileType != OpenSearchFileType) {
       // Without a range the server runs the whole document; for opensearch that is the only form.
-      val lenses = try {
-        request(client, holdsRestart = false) { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) }
-      } catch (e: CommandFailed) {
-        // Running the whole document instead could run statements the user did not mean to run.
-        report(request.file, e.failure, CODE_LENS, listOf(args))
-        return
-      }
-      // The lens ranges are for the text the request saw; on edited text one can select another statement.
-      if (request.document.modificationStamp != request.stamp) {
-        notify(project, CHANGED, NotificationType.INFORMATION)
-        return
-      }
-      lensArgAt(lenses.orEmpty(), request.caret, RUN_STATEMENT)?.let { CommandArgs.from(it).range }?.let { args.add("range", gson.toJsonTree(it)) }
+      val lens = lensAtCaret(client, request, uri, RUN_STATEMENT, CHANGED) ?: return
+      lens.arg?.let { CommandArgs.from(it).range }?.let { args.add("range", gson.toJsonTree(it)) }
     }
     runStatement(client, request.file, args)
+  }
+
+  /** For a caller on the EDT, which must not wait. */
+  fun launchOpen(request: RunRequest) {
+    cs.launch { open(request) }
+  }
+
+  /** Open in DynoTable: the server decides which statements get an Open lens, and with which argument. */
+  suspend fun open(request: RunRequest) {
+    val client = ready(request.file) ?: return
+    val uri = client.getDocumentIdentifier(request.file).uri
+    val lens = lensAtCaret(client, request, uri, OPEN_IN_APP, OPEN_CHANGED) ?: return
+    if (lens.arg == null) {
+      notify(project, NO_OPEN, NotificationType.INFORMATION)
+      return
+    }
+    command(client, request.file, OPEN_IN_APP, listOf(lens.arg))
+  }
+
+  /** [arg] is `null` when no [command] lens holds the caret. */
+  private class Lens(val arg: Any?)
+
+  /** The server's [command] lens at the caret; `null` once the user saw why nothing goes on. */
+  private suspend fun lensAtCaret(client: LspClient, request: RunRequest, uri: String, command: String, changed: String): Lens? {
+    val lenses = try {
+      request(client, holdsRestart = false) { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) }
+    } catch (e: CommandFailed) {
+      // Going on without the lens could run or open statements the user did not mean.
+      report(request.file, e.failure, CODE_LENS, emptyList())
+      return null
+    }
+    // The lens ranges are for the text the request saw; on edited text one can select another statement.
+    if (request.document.modificationStamp != request.stamp) {
+      notify(project, changed, NotificationType.INFORMATION)
+      return null
+    }
+    return Lens(lensArgAt(lenses.orEmpty(), request.caret, command))
   }
 
   /** Connects, then checks that the server has [file] open: the client, or `null` once the user saw why. */

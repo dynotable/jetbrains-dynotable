@@ -1,0 +1,19 @@
+<idea-plugin>
+  <id>com.dynotable.jetbrains</id>
+  <name>DynoTable</name>
+  <vendor url="https://dynotable.com">DynoTable</vendor>
+
+  <description><![CDATA[
+    <p>Write SQL and PartiQL for DynamoDB, and SQL and the query DSL for OpenSearch, in JetBrains IDEs.
+    The DynoTable desktop app serves the language features and runs the queries.</p>
+    <p>Requires the DynoTable desktop app, version 1.19.0 or later, with the Editor integration switched on.</p>
+  ]]></description>
+
+  <change-notes><![CDATA[
+    <p>0.1.0: first release.</p>
+  ]]></change-notes>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.lsp</depends>
+  <depends>org.jetbrains.plugins.textmate</depends>
+</idea-plugin>

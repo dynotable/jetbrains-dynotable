@@ -65,26 +65,31 @@
   </projectListeners>
 
   <actions>
-    <action id="DynoTable.Run" class="com.dynotable.run.RunAction" text="Run DynoTable Query"
-            description="Run the selection, else the statement at the caret, else the whole file">
-      <keyboard-shortcut keymap="$default" first-keystroke="control ENTER"/>
-    </action>
-    <action id="DynoTable.Open" class="com.dynotable.run.OpenAction" text="Open in DynoTable"
-            description="Open the statement at the caret in DynoTable">
-      <keyboard-shortcut keymap="$default" first-keystroke="control shift ENTER"/>
-    </action>
-    <action id="DynoTable.SelectProfile" class="com.dynotable.profiles.SelectProfileAction" text="Select DynoTable Profile"
-            description="Choose the DynoTable profile that runs queries and lists tables"/>
-    <action id="DynoTable.NewQuery" class="com.dynotable.query.NewQueryAction" text="New DynoTable Query"
-            description="Open a new query: on an explorer table or index, a query for it; else in the language you choose"/>
-    <action id="DynoTable.PickIndex" class="com.dynotable.query.PickIndexAction" text="Pick OpenSearch Index"
-            description="Write the chosen OpenSearch index into the first line of the query"/>
-    <action id="DynoTable.RefreshExplorer" class="com.dynotable.explorer.RefreshExplorerAction" text="Refresh DynoTable Explorer"
-            description="List the tables and indices again" icon="AllIcons.Actions.Refresh"/>
-    <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
-            description="Connect to DynoTable again"/>
-    <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"
-            description="Open the DynoTable documentation for editors"/>
+    <group id="DynoTable.Tools" text="DynoTable" popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+      <action id="DynoTable.Run" class="com.dynotable.run.RunAction" text="Run DynoTable Query"
+              description="Run the selection, else the statement at the caret, else the whole file">
+        <keyboard-shortcut keymap="$default" first-keystroke="control ENTER"/>
+      </action>
+      <action id="DynoTable.Open" class="com.dynotable.run.OpenAction" text="Open in DynoTable"
+              description="Open the statement at the caret in DynoTable">
+        <keyboard-shortcut keymap="$default" first-keystroke="control shift ENTER"/>
+      </action>
+      <action id="DynoTable.NewQuery" class="com.dynotable.query.NewQueryAction" text="New DynoTable Query"
+              description="Open a new query: on an explorer table or index, a query for it; else in the language you choose"/>
+      <action id="DynoTable.PickIndex" class="com.dynotable.query.PickIndexAction" text="Pick OpenSearch Index"
+              description="Write the chosen OpenSearch index into the first line of the query"/>
+      <action id="DynoTable.AttachSqlFile" class="com.dynotable.actions.AttachSqlFileAction" text="Attach SQL File to DynoTable"
+              description="Add the SQL file in the editor to the SQL files that DynoTable serves"/>
+      <action id="DynoTable.SelectProfile" class="com.dynotable.profiles.SelectProfileAction" text="Select DynoTable Profile"
+              description="Choose the DynoTable profile that runs queries and lists tables"/>
+      <action id="DynoTable.Reconnect" class="com.dynotable.actions.ReconnectAction" text="Reconnect DynoTable"
+              description="Connect to DynoTable again"/>
+      <action id="DynoTable.OpenDocs" class="com.dynotable.actions.OpenDocsAction" text="Open DynoTable Documentation"
+              description="Open the DynoTable documentation for editors"/>
+      <action id="DynoTable.RefreshExplorer" class="com.dynotable.explorer.RefreshExplorerAction" text="Refresh DynoTable Explorer"
+              description="List the tables and indices again" icon="AllIcons.Actions.Refresh"/>
+    </group>
   </actions>
 
   <extensions defaultExtensionNs="com.intellij.textmate">

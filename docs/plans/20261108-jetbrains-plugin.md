@@ -637,11 +637,11 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 - Create: `actions/AttachSqlFileAction.kt`, `actions/Attach.kt` (pure)
 - Modify: `plugin.xml` (Tools › DynoTable group with every action)
 
-- [ ] Attach SQL File appends the project-relative path (`\` → `/`, leading and trailing spaces kept), escaped for the Task 5 glob matcher, to `sqlFiles`; a file outside the project or no project → message, no change; then the `sqlFiles` change path
-- [ ] Tools › DynoTable lists Run, Open in DynoTable, New Query, Pick Index, Attach SQL File, Select Profile, Reconnect, Open Documentation, Refresh Explorer
-- [ ] write unit tests from `attach.test.ts`, checked through the Task 5 matcher (the escaped pattern matches the file and not a near name such as `p.sql`): `[prod].sql`, `{a}.sql`, `a*?.sql`, a padded name, a Windows path, no project → refused
-- [ ] write an integration test: Attach SQL File on `[prod].sql` makes that open file served
-- [ ] run tests
+- [x] Attach SQL File appends the project-relative path (`\` → `/`, leading and trailing spaces kept), escaped for the Task 5 glob matcher, to `sqlFiles`; a file outside the project or no project → message, no change; then the `sqlFiles` change path. Done: `actions/Attach.kt` (`attach`), `actions/AttachSqlFileAction.kt` (action `DynoTable.AttachSqlFile`): the `.sql` file in the editor; "in the project" = in project content and under the base dir (as the overrider); messages as VS Code: no `.sql` file, already DynoTable SQL, outside the project (with the `*.dynotable.sql` hint, because 2026.3 serves such a file outside the project). The `\` → `/` branch runs only on Windows and is defensive: `VirtualFile.path` and `basePath` already use `/`
+- [x] Tools › DynoTable lists Run, Open in DynoTable, New Query, Pick Index, Attach SQL File, Select Profile, Reconnect, Open Documentation, Refresh Explorer. Done: group `DynoTable.Tools` in `ToolsMenu` holds every action in this order; Run, Open and Pick Index show only in their editors (their `update`, unchanged). `ManifestTest` checks that no action is outside the group
+- [x] write unit tests from `attach.test.ts`, checked through the Task 5 matcher (the escaped pattern matches the file and not a near name such as `p.sql`): `[prod].sql`, `{a}.sql`, `a*?.sql`, a padded name, a Windows path, no project → refused. Done: `actions/AttachTest` (also a file outside the base dir, as a content root can lie outside it)
+- [x] write an integration test: Attach SQL File on `[prod].sql` makes that open file served. Done: `actions/AttachSqlFileTest` (checked by a mutation: no escaping → no `didOpen`); the `didOpen` URI encodes the brackets (`%5Bprod%5D.sql`)
+- [x] run tests (`./gradlew build` green: 293 tests, 0 skipped, 0 failed)
 
 ### Task 17: Live tests against the real app
 

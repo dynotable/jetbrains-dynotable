@@ -492,12 +492,12 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
 - Create: `files/FileTypes.kt`, `files/SqlFilesOverrider.kt`, `files/SqlGlobs.kt` (pure), `files/TextMateBundle.kt`, `settings/DynoTableSettings.kt`, `settings/DynoTableConfigurable.kt`
 - Modify: `plugin.xml`
 
-- [ ] three file types with one plugin icon; TextMate bundle provider that copies the bundle from the jar to a directory under `PathManager.getSystemPath()`; for each own file type register **both** `lang.syntaxHighlighterFactory` (`TextMateSyntaxHighlighterFactory`) and `editorHighlighterProvider` (`TextMateEditorHighlighterProvider`) (spike point 5: without the second the editor throws)
-- [ ] `fileTypeOverrider`: a `.sql` file is DynoTable SQL when it matches a `sqlFiles` glob of the open project whose content holds it (globs relative to that project's base dir)
-- [ ] settings and settings page; `sqlFiles` project-level (shared, default empty); `appPath`, `userDataDir` application-level
-- [ ] write unit tests for the glob match: a root-level file under `**/`; a file outside the project
-- [ ] write tests: `appPath` and `userDataDir` are application-level (never in project-shared storage); the bundle path resolves to a directory with the grammars in the built plugin sandbox
-- [ ] run tests
+- [x] three file types with one plugin icon; TextMate bundle provider that copies the bundle from the jar to a directory under `PathManager.getSystemPath()`; for each own file type register **both** `lang.syntaxHighlighterFactory` (`TextMateSyntaxHighlighterFactory`) and `editorHighlighterProvider` (`TextMateEditorHighlighterProvider`) (spike point 5: without the second the editor throws). Done: file types "DynoTable SQL" (`*.dynotable.sql`), "DynoTable PartiQL", "DynoTable OpenSearch" with prefixed language ids; the OpenSearch grammar's `source.json.comments` include resolves to the IDE's bundled JSON bundle (checked headless)
+- [x] `fileTypeOverrider`: a `.sql` file is DynoTable SQL when it matches a `sqlFiles` glob of the open project whose content holds it (globs relative to that project's base dir). Done: own matcher with the VS Code glob rules (`SqlGlobs`); the `sqlFiles` setter calls `makeFileTypesChange` (Task 9 adds the restart there)
+- [x] settings and settings page; `sqlFiles` project-level (shared, default empty); `appPath`, `userDataDir` application-level. Done: `.idea/dynotable.xml` for the project; app level with roaming off (as VS Code `machine` scope)
+- [x] write unit tests for the glob match: a root-level file under `**/`; a file outside the project. Done: also a sibling folder with the same path prefix, a single star in one segment, a brace group
+- [x] write tests: `appPath` and `userDataDir` are application-level (never in project-shared storage); the bundle path resolves to a directory with the grammars in the built plugin sandbox. Done: `SettingsScopeTest`; the bundle path is checked through its effect: `HighlightingTest` opens a `.partiql`, `.opensearch` and `.dynotable.sql` file in the test sandbox and finds the scoped TextMate tokens of each grammar (a missing bundle, grammar or JSON include gives unscoped tokens), and a `sqlFiles` change switches an open `.sql` file at once
+- [x] run tests
 
 ### Task 6: Discovery and app locator (pure rules)
 

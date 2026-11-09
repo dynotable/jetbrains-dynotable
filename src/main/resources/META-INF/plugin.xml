@@ -16,4 +16,35 @@
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.lsp</depends>
   <depends>org.jetbrains.plugins.textmate</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <fileType name="DynoTable SQL" language="DynoTableSQL" patterns="*.dynotable.sql"
+              implementationClass="com.dynotable.files.DynoTableSqlFileType" fieldName="INSTANCE"/>
+    <fileType name="DynoTable PartiQL" language="DynoTablePartiQL" extensions="partiql"
+              implementationClass="com.dynotable.files.PartiQLFileType" fieldName="INSTANCE"/>
+    <fileType name="DynoTable OpenSearch" language="DynoTableOpenSearch" extensions="opensearch"
+              implementationClass="com.dynotable.files.OpenSearchFileType" fieldName="INSTANCE"/>
+    <fileTypeOverrider implementation="com.dynotable.files.SqlFilesOverrider"/>
+
+    <!-- Own file types need both, else the editor throws "Token type ... is not registered". -->
+    <lang.syntaxHighlighterFactory language="DynoTableSQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory language="DynoTablePartiQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <lang.syntaxHighlighterFactory language="DynoTableOpenSearch"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateSyntaxHighlighterFactory"/>
+    <editorHighlighterProvider filetype="DynoTable SQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+    <editorHighlighterProvider filetype="DynoTable PartiQL"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+    <editorHighlighterProvider filetype="DynoTable OpenSearch"
+        implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
+
+    <projectConfigurable parentId="tools" id="com.dynotable.settings" displayName="DynoTable" nonDefaultProject="true"
+                         instance="com.dynotable.settings.DynoTableConfigurable"/>
+  </extensions>
+
+  <extensions defaultExtensionNs="com.intellij.textmate">
+    <bundleProvider implementation="com.dynotable.files.TextMateBundle"/>
+  </extensions>
 </idea-plugin>

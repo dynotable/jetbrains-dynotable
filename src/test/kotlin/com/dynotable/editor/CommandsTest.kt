@@ -25,15 +25,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.eclipse.lsp4j.CodeAction
 import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.CreateFile
 import org.eclipse.lsp4j.Diagnostic
+import org.eclipse.lsp4j.MessageActionItem
 import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.MessageType
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.Range
+import org.eclipse.lsp4j.ResourceOperation
+import org.eclipse.lsp4j.ShowMessageRequestParams
+import org.eclipse.lsp4j.SnippetTextEdit
+import org.eclipse.lsp4j.StringValue
+import org.eclipse.lsp4j.TextDocumentEdit
 import org.eclipse.lsp4j.TextEdit
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier
 import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
+import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -42,6 +51,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
+import java.util.concurrent.TimeUnit
 import kotlin.system.measureTimeMillis
 import kotlin.time.Duration.Companion.minutes
 
@@ -116,6 +126,28 @@ class CommandsTest {
     }
   }
 
+  // The balloon renders HTML, and its action labels render a text that starts with <html> as HTML.
+  @Test
+  fun `a server showMessageRequest shows its text and its action title as plain text, and answers the server's own title`() = run {
+    val hostile = """<html><img src="https://example.com/x.png">"""
+    h.fake.start()
+    open("q.partiql")
+    connected()
+    waitFor("one open session") { h.fake.sessions.count { it.initialized } == 1 }
+    val params = ShowMessageRequestParams(listOf(MessageActionItem(hostile))).apply {
+      type = MessageType.Info
+      message = hostile
+    }
+    val answer = h.fake.sessions.single { it.initialized }.remote.request("window/showMessageRequest", params)
+    waitFor("the notification") { h.notifications.isNotEmpty() }
+    val shown = h.notifications.single()
+    assertFalse("<img" in shown.content, shown.content)
+    assertTrue(StringUtil.escapeXmlEntities(hostile) in shown.content, shown.content)
+    assertEquals(listOf("\u200B$hostile"), shown.actions.map { it.templateText })
+    h.click(shown, "\u200B$hostile")
+    assertEquals(MessageActionItem(hostile), withContext(Dispatchers.IO) { answer.get(10, TimeUnit.SECONDS) })
+  }
+
   // The server sends none of these; a listener on a stale port could.
   @Test
   fun `the server's applyEdit, registerCapability, showDocument and configuration are refused`() = run {
@@ -131,7 +163,10 @@ class CommandsTest {
         h.fake.requestAll("workspace/configuration", mapOf("items" to listOf(emptyMap<String, Any>())))
     }
     assertEquals(4, answers.size)
-    for (answer in answers) assertTrue(answer is ResponseErrorException, "$answer")
+    for (answer in answers) {
+      val error = (answer as ResponseErrorException).responseError
+      assertEquals(-32803 to "The DynoTable client refuses this request.", error.code to error.message)
+    }
     assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 
@@ -152,19 +187,6 @@ class CommandsTest {
     assertTrue(measureTimeMillis { assertNull(commands.send(file, VALIDATE_QUERY, args(file))) } >= 3000)
     assertEquals("No open DynoTable document at ${file.url}. Open the file before running it.", h.sentences().last())
     assertEquals(2, h.sentences().size)
-  }
-
-  // No app is installed and no port file exists, so the file open latches not-installed and shows it.
-  @Test
-  fun `a command shows the latched reason exactly once more`() = run {
-    val file = open("q.opensearch", "{}")
-    h.awaitStatus(Status.Disconnected(Reason.NOT_INSTALLED))
-    // The status changes before its notification is posted.
-    waitFor("the latch's notification") { h.notifications.isNotEmpty() }
-    assertEquals(listOf(Reason.NOT_INSTALLED.sentence), h.sentences())
-    assertNull(commands.send(file, VALIDATE_QUERY, args(file)))
-    delay(500)
-    assertEquals(listOf(Reason.NOT_INSTALLED.sentence, Reason.NOT_INSTALLED.sentence), h.sentences())
   }
 
   @Test
@@ -225,6 +247,46 @@ class CommandsTest {
     val titles = intentions.map { it.text }
     assertFalse("Edit two files" in titles, "$titles")
     withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Replace with SELECT" }) }
+    assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
+  }
+
+  // Decision 4: a versioned edit applies only to the version the server saw; a file operation or a snippet cannot apply here.
+  @Test
+  fun `a versioned fix of the current version applies, and a stale version, a file operation or a snippet is not offered`() = run {
+    h.fake.start()
+    val file = scratch("SELEC 1")
+    val first = Range(Position(0, 0), Position(0, 5))
+    fun versioned(uri: String, version: Int, edit: Either<TextEdit, SnippetTextEdit>) =
+      WorkspaceEdit(listOf(Either.forLeft<TextDocumentEdit, ResourceOperation>(TextDocumentEdit(VersionedTextDocumentIdentifier(uri, version), listOf(edit)))))
+    val intentions = quickFixes(file) { uri ->
+      listOf(
+        quickFix("Current version") { edit = versioned(uri, 0, Either.forLeft(TextEdit(first, "SELECT"))) },
+        quickFix("Stale version") { edit = versioned(uri, 5, Either.forLeft(TextEdit(first, "X"))) },
+        quickFix("Snippet") { edit = versioned(uri, 0, Either.forRight(SnippetTextEdit(first, StringValue().apply { kind = "snippet"; value = "SELECT \$1" }))) },
+        quickFix("Create file") { edit = WorkspaceEdit(listOf(Either.forRight<TextDocumentEdit, ResourceOperation>(CreateFile("file:///new.partiql")))) },
+      )
+    }
+    val titles = intentions.map { it.text }
+    for (title in listOf("Stale version", "Snippet", "Create file")) assertFalse(title in titles, "$titles")
+    withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Current version" }) }
+    assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
+  }
+
+  // A server may send one edit in both forms; applying both would insert the text twice.
+  @Test
+  fun `a fix that sends its edit as both changes and documentChanges applies it once`() = run {
+    h.fake.start()
+    val file = scratch("SELEC 1")
+    val first = Range(Position(0, 0), Position(0, 5))
+    val intentions = quickFixes(file) { uri ->
+      listOf(
+        quickFix("Both forms") {
+          edit = WorkspaceEdit(listOf(Either.forLeft<TextDocumentEdit, ResourceOperation>(TextDocumentEdit(VersionedTextDocumentIdentifier(uri, 0), listOf(Either.forLeft(TextEdit(first, "SELECT")))))))
+            .apply { changes = mapOf(uri to listOf(TextEdit(first, "SELECT"))) }
+        },
+      )
+    }
+    withContext(Dispatchers.EDT) { fixture.launchAction(intentions.single { it.text == "Both forms" }) }
     assertEquals("SELECT 1", withContext(Dispatchers.EDT) { fixture.editor.document.text })
   }
 

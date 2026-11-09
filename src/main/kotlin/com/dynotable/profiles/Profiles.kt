@@ -17,13 +17,13 @@ data class RequestedProfile(val id: String, val name: String)
 data class ProfileItem(val text: String, val detail: String, val row: ProfileRow, val refusal: String?)
 
 sealed interface Picker {
-  data class Empty(val sentence: String) : Picker
+  data object Empty : Picker
 
   data class Pick(val items: List<ProfileItem>) : Picker
 }
 
 fun pickerOf(rows: List<ProfileRow>): Picker {
-  if (rows.isEmpty()) return Picker.Empty(EMPTY_ROSTER)
+  if (rows.isEmpty()) return Picker.Empty
   return Picker.Pick(
     rows.map { row ->
       val refusal = when {

@@ -45,14 +45,16 @@ class DynoTableQuickFix(client: LspClient, private val action: CodeAction) : Lsp
   private fun edits(file: VirtualFile): List<TextEdit>? {
     val edit = action.edit ?: return emptyList()
     val uri = lspClient.descriptor.getFileUri(file)
-    val changes = edit.changes.orEmpty()
-    if (changes.keys.any { it != uri }) return null
+    // The client advertises documentChanges, so the spec says to ignore changes when both are sent.
+    val documentChanges = edit.documentChanges ?: run {
+      val changes = edit.changes.orEmpty()
+      return if (changes.keys.any { it != uri }) null else changes[uri].orEmpty()
+    }
     val document = FileDocumentManager.getInstance().getDocument(file) ?: return null
-    val versioned = edit.documentChanges.orEmpty().flatMap { change ->
+    return documentChanges.flatMap { change ->
       val text = change.left?.takeIf { it.textDocument.uri == uri } ?: return null
       if (text.textDocument.version?.let { it != lspClient.getDocumentVersion(document) } == true) return null
       text.edits.map { it.left ?: return null }
     }
-    return changes[uri].orEmpty() + versioned
   }
 }

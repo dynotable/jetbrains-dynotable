@@ -1,5 +1,6 @@
 package com.dynotable.protocol
 
+import com.google.gson.JsonParser
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -31,6 +32,23 @@ class ProtocolTest {
   @Test
   fun `a port file prints its port and pid, never its token`() {
     assertEquals("PortFile(port=41120, pid=111)", PortFile(41120, "s3cret-token", 111).toString())
+  }
+
+  // The plugin connects to the port and sends the token: a port out of range, an empty token or a
+  // pid that names no process must not read as a port file.
+  @ParameterizedTest
+  @CsvSource(
+    delimiter = '|',
+    value = [
+      "{\"port\":0,\"token\":\"t\"}",
+      "{\"port\":65536,\"token\":\"t\"}",
+      "{\"port\":1.5,\"token\":\"t\"}",
+      "{\"port\":41120,\"token\":\"\"}",
+      "{\"port\":41120,\"token\":\"t\",\"pid\":0}",
+    ],
+  )
+  fun `a port file with a bad field is refused`(text: String) {
+    assertThrows<ProtocolException> { PortFile.from(JsonParser.parseString(text)) }
   }
 
   // A missing total would read as "unknown" only by accident, and a string count would print as a total.

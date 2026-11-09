@@ -1,7 +1,6 @@
 package com.dynotable.run
 
 import com.dynotable.protocol.CommandArgs
-import com.dynotable.protocol.ProtocolException
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
@@ -17,10 +16,6 @@ fun contains(range: Range, position: Position) = before(range.start, position) &
  */
 fun lensArgAt(lenses: List<CodeLens>, caret: Position, command: String): Any? = lenses.firstNotNullOfOrNull { lens ->
   val arg = lens.command?.takeIf { it.command == command }?.arguments?.firstOrNull() ?: return@firstNotNullOfOrNull null
-  val range = try {
-    CommandArgs.from(arg).range
-  } catch (_: ProtocolException) {
-    null
-  }
+  val range = CommandArgs.orNull(arg)?.range
   arg.takeIf { range != null && contains(range, caret) }
 }

@@ -1,6 +1,8 @@
 package com.dynotable.settings
 
+import com.intellij.openapi.components.RoamingType
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.State
 import com.intellij.openapi.util.JDOMUtil
 import com.intellij.util.xmlb.XmlSerializer
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -27,8 +29,11 @@ class SettingsScopeTest {
     assertFalse("hostile" in saved, saved)
   }
 
+  // Settings Sync would carry them to another computer, where the paths name another app.
   @Test
-  fun `appPath and userDataDir are application-level`() {
+  fun `appPath and userDataDir are application-level and do not roam`() {
     assertArrayEquals(arrayOf(Service.Level.APP), DynoTableAppSettings::class.java.getAnnotation(Service::class.java).value)
+    val storages = DynoTableAppSettings::class.java.getAnnotation(State::class.java).storages
+    assertEquals(listOf(RoamingType.DISABLED), storages.map { it.roamingType })
   }
 }

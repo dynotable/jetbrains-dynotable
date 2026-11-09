@@ -1,5 +1,6 @@
 package com.dynotable.live
 
+import com.dynotable.connect.DETACH
 import com.dynotable.connect.Platform
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
 import kotlin.io.path.createDirectories
 import kotlin.io.path.createFile
 
@@ -51,6 +53,26 @@ class LiveAppTest {
   @Test
   fun `a relative directory is refused`() {
     assertThrows<IllegalArgumentException> { dirOf("live") }
+  }
+
+  // Open DynoTable (`open -a`, or the binary with no flag) would start an app with its window, outside the test's control.
+  @Test
+  fun `the live spawner starts only the wrapper with --headless, directly or through the detach wrapper`() {
+    val wrapper = temp.resolve("dynotable-dev")
+    Files.writeString(wrapper, "#!/bin/sh\necho started >> '${temp.resolve("starts")}'\n")
+    Files.setPosixFilePermissions(wrapper, PosixFilePermissions.fromString("rwx------"))
+    val other = temp.resolve("other").also { Files.copy(wrapper, it) }
+    val guard = guardedSpawner("$wrapper")
+    val refused = listOf(
+      listOf("/usr/bin/open", "-a", "$wrapper"),
+      listOf("$wrapper"),
+      listOf("$wrapper", "--headless", "--extra"),
+      listOf("$other", "--headless"),
+      DETACH + listOf("$other", "--headless"),
+    )
+    for (command in refused) assertThrows<IllegalStateException>("$command") { guard.start(ProcessBuilder(command)) }
+    for (command in listOf(listOf("$wrapper", "--headless"), DETACH + listOf("$wrapper", "--headless"))) guard.start(ProcessBuilder(command)).waitFor()
+    assertEquals(listOf("started", "started"), Files.readAllLines(temp.resolve("starts")))
   }
 
   private fun appOf(path: String) = liveAppPath(mapOf("DYNOTABLE_LIVE_APP_PATH" to path))

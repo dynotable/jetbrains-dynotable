@@ -11,6 +11,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 
 const val PERL = "/usr/bin/perl"
@@ -43,20 +44,28 @@ fun interface Spawner {
 
   companion object {
     /**
-     * In test mode only a binary under [testAppRoot] may run, directly or through the detach
-     * wrapper, so no test can start the real app or `open` anything.
+     * In test mode only a binary under [testAppRoot] may run, directly or through the exact detach
+     * wrapper, so no test can start the real app or `open` anything. Links count where they point.
      */
     fun of(testMode: Boolean, testAppRoot: String?): Spawner = if (!testMode) {
       Spawner { it.start() }
     } else {
       Spawner { builder ->
         val command = builder.command()
-        val program = if (command.first() == PERL) command.getOrNull(DETACH.size) else command.first()
-        check(testAppRoot != null && program != null && Path.of(program).normalize().startsWith(Path.of(testAppRoot).normalize())) {
+        val program = if (command.first() == PERL) command.getOrNull(DETACH.size)?.takeIf { command.take(DETACH.size) == DETACH } else command.first()
+        check(testAppRoot != null && program != null && isUnder(program, testAppRoot)) {
           "In tests only a fake binary under $TEST_APP_ROOT_PROPERTY may start, not $program"
         }
         builder.start()
       }
+    }
+
+    private fun isUnder(program: String, root: String): Boolean = try {
+      Path.of(program).isAbsolute && Path.of(program).toRealPath().startsWith(Path.of(root).toRealPath())
+    } catch (_: IOException) {
+      false
+    } catch (_: InvalidPathException) {
+      false
     }
   }
 }

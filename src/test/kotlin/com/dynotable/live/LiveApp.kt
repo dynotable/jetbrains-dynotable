@@ -22,7 +22,6 @@ import com.dynotable.protocol.ProfileRow
 import com.dynotable.editor.ServerCommands
 import com.dynotable.results.Results
 import com.dynotable.results.View
-import com.dynotable.run.RunRequest
 import com.dynotable.settings.DynoTableAppSettings
 import com.dynotable.status.Status
 import com.intellij.openapi.application.EDT
@@ -222,7 +221,8 @@ object LiveApp {
 
   /**
    * Before the first live test: the app that serves on [dir] opens no file under the real user
-   * data directory. A release build can relaunch itself through its updater on the real directory.
+   * data directory, and writes no port file there. A release build can relaunch itself through its
+   * updater on the real directory.
    */
   suspend fun ensureIsolated() {
     if (isolated) return
@@ -234,6 +234,13 @@ object LiveApp {
     val real = defaultUserDataDir(Platform.current(), env, home).lowercase()
     val leaks = names.filter { it.lowercase() == real || it.lowercase().startsWith("$real/") }
     check(leaks.isEmpty()) { "an app on $dir has files open in the real user data directory: $leaks" }
+    // Only the time stamp: a test never reads the real port file.
+    val realPortFile = Path.of(defaultUserDataDir(Platform.current(), env, home), "lsp-port.json")
+    val started = pids.mapNotNull { ProcessHandle.of(it).flatMap { p -> p.info().startInstant() }.orElse(null) }.minOrNull()
+      ?: error("the start time of the apps on $dir is unknown")
+    check(!Files.exists(realPortFile) || Files.getLastModifiedTime(realPortFile).toInstant() < started) {
+      "the real port file changed after an app on $dir started"
+    }
     isolated = true
   }
 }
@@ -267,7 +274,7 @@ class Live(val h: Harness, val spawns: SpawnRecorder) {
     return row
   }
 
-  suspend fun run(editor: Editor) = ServerCommands.getInstance(project).run(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+  suspend fun run(editor: Editor) = ServerCommands.getInstance(project).run(editor)
 
   /** The result the results tool window shows. */
   fun result(): View.Result = Results.getInstance(project).view.let { it as? View.Result ?: error("the results show $it, notifications ${h.sentences()}") }

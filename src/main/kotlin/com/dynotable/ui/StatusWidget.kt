@@ -29,15 +29,18 @@ class StatusWidgetFactory : StatusBarWidgetFactory {
 class StatusWidget(private val project: Project) : StatusBarWidget, StatusBarWidget.TextPresentation {
   private val core get() = ConnectCore.getInstance(project)
 
+  // Every project has the widget. It must not start the connection, and its port-file watcher, itself.
+  private val status get() = project.getServiceIfCreated(ConnectCore::class.java)?.status ?: Status.Hidden
+
   override fun ID() = ID
 
   override fun getPresentation() = this
 
   private val requested get() = DynoTableWorkspaceSettings.getInstance(project).profile?.name
 
-  override fun getText() = core.status.text(requested)
+  override fun getText() = status.text(requested)
 
-  override fun getTooltipText() = core.status.tooltip(requested)
+  override fun getTooltipText() = status.tooltip(requested)
 
   override fun getAlignment() = Component.LEFT_ALIGNMENT
 

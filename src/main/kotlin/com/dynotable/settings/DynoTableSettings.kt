@@ -2,6 +2,7 @@ package com.dynotable.settings
 
 import com.dynotable.connect.ConnectCore
 import com.dynotable.profiles.RequestedProfile
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.BaseState
 import com.intellij.openapi.components.RoamingType
@@ -62,11 +63,30 @@ class DynoTableProjectSettings(private val project: Project) : SimplePersistentS
     set(value) {
       if (value == state.sqlFiles) return
       state.sqlFiles = value.toMutableList()
-      // The platform caches the file type of each file until a file types change.
-      WriteAction.run<Throwable> { FileTypeManagerEx.getInstanceEx().makeFileTypesChange("DynoTable sqlFiles changed") {} }
-      // Another set of files needs a new client.
-      ConnectCore.getInstance(project).sqlFilesChanged()
+      sqlFilesChanged()
     }
+
+  /** `false` until the first load: that one only reads what the project had. */
+  private var loaded = false
+
+  // A VCS update of `.idea/dynotable.xml` loads the state again.
+  override fun loadState(state: State) {
+    val before = this.state.sqlFiles.toList()
+    super.loadState(state)
+    if (loaded && before != state.sqlFiles) ApplicationManager.getApplication().invokeLater(::sqlFilesChanged, project.disposed)
+    loaded = true
+  }
+
+  override fun noStateLoaded() {
+    if (loaded) loadState(State()) else loaded = true
+  }
+
+  private fun sqlFilesChanged() {
+    // The platform caches the file type of each file until a file types change.
+    WriteAction.run<Throwable> { FileTypeManagerEx.getInstanceEx().makeFileTypesChange("DynoTable sqlFiles changed") {} }
+    // Another set of files needs a new client.
+    ConnectCore.getInstance(project).sqlFilesChanged()
+  }
 
   companion object {
     fun getInstance(project: Project): DynoTableProjectSettings = project.service()

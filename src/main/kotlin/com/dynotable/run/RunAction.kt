@@ -15,7 +15,10 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 
-/** What the user asked to run or open, read when the action ran: a later edit must not change it. */
+/**
+ * What the user asked to run or open, read once the server has the file open: a cold start can take
+ * seconds, and the user can type meanwhile.
+ */
 data class RunRequest(
   val file: VirtualFile,
   val document: Document,
@@ -46,8 +49,7 @@ class RunAction : DumbAwareAction() {
 
   override fun actionPerformed(e: AnActionEvent) {
     val project = e.project ?: return
-    val request = RunRequest.of(e.getData(CommonDataKeys.EDITOR) ?: return) ?: return
-    ServerCommands.getInstance(project).launchRun(request)
+    ServerCommands.getInstance(project).launchRun(e.getData(CommonDataKeys.EDITOR) ?: return)
   }
 }
 

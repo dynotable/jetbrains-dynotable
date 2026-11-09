@@ -1,6 +1,7 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 
 plugins {
   id("org.jetbrains.kotlin.jvm") version "2.4.21"
@@ -100,6 +101,24 @@ tasks.test {
   val scratches = layout.buildDirectory.dir("tmp/test scratches").get().asFile
   systemProperty("idea.scratch.path", scratches.absolutePath)
   doFirst { scratches.deleteRecursively() }
+}
+
+// The runIde sandbox must not reach the user's app. The userDataDir setting turns the launcher off,
+// and a port file under build/ belongs to no app. A setting changed in the sandbox stays.
+// `prepareSandbox_runIde` and its split-mode variants too; not the test sandboxes.
+tasks.withType<PrepareSandboxTask>().matching { it.name.startsWith("prepareSandbox") }.configureEach {
+  val options = sandboxConfigDirectory.dir("options")
+  val userData = layout.buildDirectory.dir("runIde-userData").get().asFile.absolutePath
+    .replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;")
+  doLast {
+    val settings = options.get().file("dynotable.xml").asFile
+    if (!settings.exists()) {
+      settings.parentFile.mkdirs()
+      settings.writeText(
+        """<application><component name="DynoTable"><option name="userDataDir" value="$userData" /></component></application>""" + "\n",
+      )
+    }
+  }
 }
 
 tasks.register("testLive") {

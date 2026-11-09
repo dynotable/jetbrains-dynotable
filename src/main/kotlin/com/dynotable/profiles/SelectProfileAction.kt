@@ -52,7 +52,7 @@ class ProfilePicker(private val project: Project, private val cs: CoroutineScope
       return
     }
     when (val picker = pickerOf(rows)) {
-      is Picker.Empty -> notify(project, picker.sentence, NotificationType.INFORMATION, listOf(Action.OPEN_APP.label to { core.perform(Action.OPEN_APP) }))
+      Picker.Empty -> notify(project, EMPTY_ROSTER, NotificationType.INFORMATION, listOf(Action.OPEN_APP.label to { core.perform(Action.OPEN_APP) }))
       is Picker.Pick -> {
         // A refused row shows its reason and cannot be chosen.
         val item = choose(project, "Select a DynoTable profile", picker.items, { it.text }, { it.detail }) { it.refusal == null } ?: return

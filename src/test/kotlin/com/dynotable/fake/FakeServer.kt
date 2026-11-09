@@ -46,6 +46,9 @@ class Session internal constructor(val socket: Socket) {
   /** Sends to this client. */
   lateinit var remote: RemoteEndpoint
     internal set
+
+  /** The `languageId` per URI of each `didOpen` on this connection: the app records opens per connection. */
+  internal val languages = ConcurrentHashMap<String, String>()
 }
 
 /** Answers a request with a JSON-encodable value or a future of one, or throws [ResponseErrorException]. */
@@ -103,7 +106,6 @@ class FakeServer(
   val sessions: MutableSet<Session> = ConcurrentHashMap.newKeySet()
 
   private val handlers = ConcurrentHashMap<String, Handler>()
-  private val languages = ConcurrentHashMap<String, String>()
   private val gson = MessageJsonHandler(emptyMap()).gson
   private val threads = AtomicInteger()
   private val executor = Executors.newCachedThreadPool { task ->
@@ -141,17 +143,17 @@ class FakeServer(
   /** The sessions that sent `initialized`: platform sessions. The preflight never sends it. */
   fun platformSessions(): Int = received.count { it.method == "initialized" }
 
-  /** The `languageId` of the `didOpen` for [uri]. */
-  fun language(uri: String): String? = languages[uri]
+  /** The `languageId` of the `didOpen` for [uri] on an open connection. */
+  fun language(uri: String): String? = sessions.firstNotNullOfOrNull { it.languages[uri] }
 
   /** The refusal of the error fixture [file], to throw from a handler. */
   fun refusal(file: String) = ResponseErrorException(gson.fromJson(fixture(file), ResponseError::class.java))
 
-  /** True once a `textDocument/didOpen` for [uri] arrived. */
-  fun opened(uri: String): Boolean = languages.containsKey(uri)
+  /** True once a `textDocument/didOpen` for [uri] arrived on an open connection. */
+  fun opened(uri: String): Boolean = sessions.any { it.languages.containsKey(uri) }
 
   /** The `didOpen` URI of the file named [name]: encoded as the client sent it (a space is `%20`). */
-  fun openedUri(name: String): String? = languages.keys.singleOrNull { it.endsWith("/$name") }
+  fun openedUri(name: String): String? = sessions.flatMap { it.languages.keys }.distinct().singleOrNull { it.endsWith("/$name") }
 
   fun start() {
     val socket = ServerSocket(0, 50, InetAddress.getLoopbackAddress())
@@ -275,8 +277,8 @@ class FakeServer(
   private fun command(session: Session, params: JsonObject): Any? {
     val uri = params["arguments"]?.asJsonArray?.firstOrNull()?.asJsonObject?.get("uri")?.asString
     // As the app: a command for a document it never opened.
-    if (uri == null || !opened(uri)) fail(ResponseErrorCode.RequestFailed.value, "No open DynoTable document at $uri. Open the file before running it.", runFailed())
-    val dialect = languages[uri].takeIf { it == "partiql" || it == "opensearch" } ?: "sql"
+    if (uri == null || !session.languages.containsKey(uri)) fail(ResponseErrorCode.RequestFailed.value, "No open DynoTable document at $uri. Open the file before running it.", runFailed())
+    val dialect = session.languages[uri].takeIf { it == "partiql" || it == "opensearch" } ?: "sql"
     return when (val command = params["command"].asString) {
       "dynotable.runStatement" -> if (holdRuns) HeldRun(dialect) else fixture("run-$dialect.json")
       "dynotable.openInApp" -> null
@@ -294,7 +296,7 @@ class FakeServer(
     when (method) {
       "exit" -> session.socket.close()
       "textDocument/didOpen" -> if (!ignoreOpens) params.asJsonObject["textDocument"].asJsonObject.let {
-        languages[it["uri"].asString] = it["languageId"].asString
+        session.languages[it["uri"].asString] = it["languageId"].asString
         // As the app: diagnostics for every opened document, also a clean one.
         session.remote.notify("textDocument/publishDiagnostics", JsonObject().apply {
           add("uri", it["uri"])

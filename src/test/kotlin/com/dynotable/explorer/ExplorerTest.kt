@@ -3,16 +3,17 @@ package com.dynotable.explorer
 import com.dynotable.editor.ServerCommands
 import com.dynotable.files.DynoTableSqlFileType
 import com.dynotable.files.OpenSearchFileType
+import com.dynotable.harness.PopupRow
 import com.dynotable.harness.harnessFixture
 import com.dynotable.harness.waitFor
 import com.dynotable.profiles.ProfilePicker
 import com.dynotable.query.IndexPicker
 import com.dynotable.query.NewQuery
 import com.dynotable.refusals.RUN_STATEMENT
-import com.dynotable.run.RunRequest
 import com.dynotable.status.Action
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
+import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.intellij.ide.scratch.ScratchFileService
@@ -31,18 +32,23 @@ import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
+import com.intellij.ui.SimpleColoredComponent
+import com.intellij.util.ui.tree.TreeUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
+import javax.swing.JComponent
+import javax.swing.plaf.basic.BasicHTML
 import javax.swing.tree.DefaultMutableTreeNode
 import kotlin.time.Duration.Companion.minutes
 
@@ -196,7 +202,7 @@ class ExplorerTest {
     waitFor("the didOpen of the new query") { h.fake.openedUri(file.name) != null }
     val uri = h.fake.openedUri(file.name)!!
 
-    ServerCommands.getInstance(project.get()).run(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+    ServerCommands.getInstance(project.get()).run(editor)
     val run = sent("workspace/executeCommand").last { it["command"].asString == RUN_STATEMENT }
     assertEquals(uri, run["arguments"].asJsonArray[0].asJsonObject["uri"].asString)
   }
@@ -284,6 +290,36 @@ class ExplorerTest {
     val warning = "\"logs\" is on more than one OpenSearch target, and the target name \"search 1\" contains a space, so it cannot be pinned."
     assertEquals(listOf("DynoTable lists no OpenSearch index.", StringUtil.escapeXmlEntities(warning)), h.sentences())
     assertEquals("// dynotable: index=\n", document.text)
+  }
+
+  // A JLabel renders a text that starts with <html> as HTML, which can load an image from anywhere.
+  @Test
+  fun `a hostile table name shows as text in the tree`() = run {
+    val hostile = """<html><img src="https://example.com/x.png">"""
+    h.fake.handle("dynotable/listTables") { _, _ -> JsonParser.parseString("""{"tables":[${Gson().toJson(hostile)}]}""") }
+    h.fake.start()
+    val panel = showExplorer()
+    waitFor("the hostile row, now ${rows(panel)}") { "  $hostile" in rows(panel) }
+    withContext(Dispatchers.EDT) {
+      val tree = panel.tree
+      TreeUtil.expandAll(tree)
+      val row = (0 until tree.rowCount).single { (tree.getPathForRow(it).lastPathComponent as DefaultMutableTreeNode).userObject == Node.Table(hostile) }
+      val node = tree.getPathForRow(row).lastPathComponent
+      val shown = tree.cellRenderer.getTreeCellRendererComponent(tree, node, false, false, true, row, false) as JComponent
+      assertNull(shown.getClientProperty(BasicHTML.propertyKey), "an HTML view")
+      assertEquals(hostile, (shown as SimpleColoredComponent).getCharSequence(false).toString())
+    }
+  }
+
+  @Test
+  fun `Pick Index shows a hostile index and target name as text`() = run {
+    val hostile = """<html><img src="https://example.com/x.png">"""
+    h.fake.handle("dynotable/listIndices") { _, _ -> JsonParser.parseString("""{"indices":[{"name":${Gson().toJson(hostile)},"target":${Gson().toJson(hostile)}}],"unreachable":[]}""") }
+    h.fake.start()
+    val document = newOpenSearchQuery().document
+    h.popups.clear()
+    IndexPicker.getInstance(project.get()).pick(document)
+    assertEquals(listOf(PopupRow("\u200B$hostile", true, "\u200B$hostile")), h.popups.single())
   }
 
   @Test

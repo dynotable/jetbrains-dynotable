@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -179,16 +180,30 @@ class LauncherTest {
     assertEquals(0, app.starts)
   }
 
-  @Test
-  fun `in test mode only a binary under the test app root starts`() {
+  // Every form must be refused: the outside fake stands for the real app.
+  @ParameterizedTest
+  @CsvSource(
+    "bundle as an argument", "detach wrapper", "no test app root", "dot-dot out of the root", "sibling root with the same prefix",
+    "relative path", "link under the root", "perl with another script",
+  )
+  fun `in test mode no other binary starts`(form: String) {
     val outside = fake(FakeRun.Exit(0), dir = tmp.resolve("other"))
+    val sibling = fake(FakeRun.Exit(0), dir = tmp.resolve("apps2"))
     val inside = fake(FakeRun.Exit(0))
     val guard = Spawner.of(testMode = true, testAppRoot = apps.toString())
-    // As `open -a <bundle>` would: the bundle under the root is only an argument.
-    assertThrows<IllegalStateException> { guard.start(ProcessBuilder(outside.binary.toString(), inside.binary.toString())) }
-    assertThrows<IllegalStateException> { guard.start(ProcessBuilder(PERL, "-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV; exit 127", outside.binary.toString())) }
-    assertThrows<IllegalStateException> { Spawner.of(testMode = true, testAppRoot = null).start(ProcessBuilder(inside.binary.toString())) }
-    assertEquals(0, outside.starts + inside.starts)
+    val (spawner, command) = when (form) {
+      // As `open -a <bundle>` would.
+      "bundle as an argument" -> guard to listOf(outside.binary.toString(), inside.binary.toString())
+      "detach wrapper" -> guard to DETACH + outside.binary.toString()
+      "no test app root" -> Spawner.of(testMode = true, testAppRoot = null) to listOf(inside.binary.toString())
+      "dot-dot out of the root" -> guard to listOf("$apps/../other/dynotable")
+      "sibling root with the same prefix" -> guard to listOf(sibling.binary.toString())
+      "relative path" -> guard to listOf(tmp.relativize(inside.binary).toString())
+      "link under the root" -> guard to listOf(Files.createSymbolicLink(apps.resolve("link"), outside.binary).toString())
+      else -> guard to listOf(PERL, "-e", "exec \"${outside.binary}\"", "x", inside.binary.toString())
+    }
+    assertThrows<IllegalStateException> { spawner.start(ProcessBuilder(command)) }
+    assertEquals(0, outside.starts + sibling.starts + inside.starts)
   }
 
   @Test

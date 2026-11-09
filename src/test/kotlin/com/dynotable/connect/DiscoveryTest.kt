@@ -45,6 +45,17 @@ class DiscoveryTest {
     assertEquals(Overrides("/tmp/ud", "/tmp/apps", "0.0.1"), Overrides.of(testMode = true, seams::get))
   }
 
+  // A test with no harness still creates the project's connection; it must not reach the user's app.
+  @Test
+  fun `in test mode an unset seam reaches neither the real port file nor an installed app`() {
+    val overrides = Overrides.of(testMode = true) { null }
+    val path = portFilePath(Platform.MAC, emptyMap(), "/Users/u", "", overrides)
+    assertFalse(path.startsWith("/Users/u/"), path)
+    val installed = FakeFs(mapOf("/Applications/DynoTable.app/Contents/MacOS/DynoTable" to "", "/usr/bin/dynotable" to ""))
+    assertNull(locateApp(installed, Platform.MAC, emptyMap(), "/Users/u", "", overrides.testAppRoot))
+    assertNull(locateApp(installed, Platform.LINUX, emptyMap(), "/Users/u", "", overrides.testAppRoot))
+  }
+
   @ParameterizedTest
   @CsvSource(
     "MAC, , , /Users/u/Library/Application Support/DynoTable/lsp-port.json",

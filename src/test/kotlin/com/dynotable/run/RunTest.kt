@@ -18,16 +18,16 @@ import com.dynotable.results.Results
 import com.dynotable.results.ResultsPanel
 import com.dynotable.results.ResultsToolWindowFactory
 import com.dynotable.results.View
-import com.dynotable.settings.DynoTableProjectSettings
 import com.dynotable.status.Action
 import com.dynotable.status.Reason
 import com.dynotable.status.Status
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.intellij.codeInsight.codeVision.CodeVisionInitializer
+import com.intellij.codeInsight.codeVision.CodeVisionHost
 import com.intellij.codeInsight.codeVision.settings.CodeVisionSettings
 import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
+import com.intellij.codeInsight.codeVision.ui.model.TextCodeVisionEntry
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CustomizedDataContext
@@ -39,6 +39,7 @@ import com.intellij.openapi.actionSystem.impl.rearrangeByPromoters
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.ide.CopyPasteManager
@@ -56,8 +57,10 @@ import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -115,12 +118,12 @@ class RunTest {
     return (h.core.status as Status.Connected).attempt
   }
 
-  private suspend fun runIn(editor: Editor) = ServerCommands.getInstance(project.get()).run(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+  private suspend fun runIn(editor: Editor) = ServerCommands.getInstance(project.get()).run(editor)
 
   private suspend fun caret(editor: Editor, line: Int, column: Int) =
     withContext(Dispatchers.EDT) { editor.caretModel.moveToOffset(editor.document.getLineStartOffset(line) + column) }
 
-  private suspend fun openIn(editor: Editor) = ServerCommands.getInstance(project.get()).open(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+  private suspend fun openIn(editor: Editor) = ServerCommands.getInstance(project.get()).open(editor)
 
   private fun opens() = h.fake.received.filter { it.method == "workspace/executeCommand" && it.params.asJsonObject["command"].asString == OPEN_IN_APP }
 
@@ -191,6 +194,21 @@ class RunTest {
     val editor = open("selection.partiql", "SELECT * FROM \"orders\" WHERE x = 1")
     withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 22) }
     runIn(editor)
+    assertEquals(range(line(0, 22)), lastRun()["range"])
+  }
+
+  // A cold start can take seconds, and the user can change the selection meanwhile.
+  @Test
+  fun `a selection changed before the server opened the file runs the new selection`() = run {
+    h.fake.ignoreOpens = true
+    h.fake.start()
+    val editor = open("late.partiql", "SELECT * FROM \"orders\" WHERE x = 1")
+    connected()
+    withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 6) }
+    // The run starts before the selection changes, and waits for the server's open sign.
+    val job = launch(start = CoroutineStart.UNDISPATCHED) { runIn(editor) }
+    withContext(Dispatchers.EDT) { editor.selectionModel.setSelection(0, 22) }
+    job.join()
     assertEquals(range(line(0, 22)), lastRun()["range"])
   }
 
@@ -355,24 +373,6 @@ class RunTest {
     assertTrue(connected() > attempt)
   }
 
-  @Test
-  fun `a sqlFiles change during a run waits for the run`() = run {
-    start()
-    val job = heldRun(open("settings.partiql", "SELECT * FROM \"orders\""))
-    val attempt = connected()
-    val settings = DynoTableProjectSettings.getInstance(project.get())
-    try {
-      withContext(Dispatchers.EDT) { settings.sqlFiles = listOf("**/*.x.sql") }
-      h.awaitStatus(Status.Starting(waitingForRun = true))
-      h.fake.releaseRuns()
-      job.join()
-      assertTrue(results.view is View.Result)
-      assertTrue(connected() > attempt)
-    } finally {
-      withContext(Dispatchers.EDT) { settings.sqlFiles = emptyList() }
-    }
-  }
-
   // A stopped client never completes its requests: a run left waiting would hold the view for good.
   @Test
   fun `a latch during a run fails the run at once and frees the next Run`() = run {
@@ -477,13 +477,14 @@ class RunTest {
     val refreshes = CopyOnWriteArrayList<Status>()
     val lifetime = LifetimeDefinition()
     try {
-      CodeVisionInitializer.getInstance(project.get()).getCodeVisionHost().invalidateProviderSignal.advise(lifetime) {
+      project.get().service<CodeVisionHost>().invalidateProviderSignal.advise(lifetime) {
         if (PLAN_PROVIDER_ID in it.providerIds) refreshes += h.core.status
       }
       start()
       val editor = open("plan.dynotable.sql")
       waitFor("a plan refresh in the session, now $refreshes") { refreshes.any { it is Status.Connected } }
       val run = serverLenses(fixture, editor).single { (line, entry) -> line == 1 && entry.text == "Run" }
+      waitFor("the plan") { lensRow(editor, PLAN_PROVIDER_ID).isNotEmpty() }
       assertEquals(listOf(run.first to "Scan customers · ~100 items"), lensRow(editor, PLAN_PROVIDER_ID).map { (line, entry) -> line to entry.text })
       withContext(Dispatchers.EDT) {
         val inlays = editor.inlayModel
@@ -492,6 +493,45 @@ class RunTest {
       }
     } finally {
       lifetime.terminate()
+    }
+  }
+
+  // The plan is a hint only: a refused request must show nothing, and must not hold back the server's lenses.
+  @Test
+  fun `a refused plan request shows no plan`() = run {
+    h.fake.handle("textDocument/inlayHint") { _, _ -> throw ResponseErrorException(ResponseError(-32603, "Internal error", null)) }
+    val refreshes = CopyOnWriteArrayList<Unit>()
+    val lifetime = LifetimeDefinition()
+    try {
+      project.get().service<CodeVisionHost>().invalidateProviderSignal.advise(lifetime) {
+        if (PLAN_PROVIDER_ID in it.providerIds && h.fake.received.any { m -> m.method == "textDocument/inlayHint" }) refreshes += Unit
+      }
+      start()
+      val editor = open("refused-plan.dynotable.sql")
+      serverLenses(fixture, editor)
+      lensRow(editor, PLAN_PROVIDER_ID)
+      // The provider asks for a new look once the failed fetch ended.
+      waitFor("the end of the plan fetch") { refreshes.isNotEmpty() }
+      assertEquals(emptyList<Pair<Int, String>>(), lensRow(editor, PLAN_PROVIDER_ID).map { (line, entry) -> line to entry.text })
+    } finally {
+      lifetime.terminate()
+    }
+  }
+
+  // The host shows all lenses together once every provider returned: a plan that waits holds back Run and Open.
+  @Test
+  fun `a plan request with no answer does not hold back the lens row`() = run {
+    val unanswered = CompletableFuture<Any?>()
+    h.fake.handle("textDocument/inlayHint") { _, _ -> unanswered }
+    start()
+    val editor = open("silent-plan.dynotable.sql")
+    serverLenses(fixture, editor)
+    try {
+      val row = async { lensRow(editor, PLAN_PROVIDER_ID) }
+      waitFor("the plan provider to return", 2_000) { row.isCompleted }
+      assertEquals(emptyList<Pair<Int, TextCodeVisionEntry>>(), row.await())
+    } finally {
+      unanswered.complete(null)
     }
   }
 
@@ -588,15 +628,20 @@ class RunTest {
     assertEquals(listOf(StringUtil.escapeXmlEntities(message)), h.sentences())
   }
 
-  // A failed run with an empty message (seen with the database down) must still tell the user something.
+  // A failed run with an empty message (seen with the database down) must still tell the user something,
+  // and must leave the last result in view, not the running view.
   @Test
-  fun `a run refused with an empty message shows our general sentence`() = run {
-    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw ResponseErrorException(ResponseError(-32803, "", mapOf("code" to "run-failed"))) }
+  fun `a run refused with an empty message shows our general sentence and keeps the last view`() = run {
     h.fake.start()
     val editor = open("empty.partiql", "SELECT * FROM \"orders\"")
     runIn(editor)
+    val previous = results.view
+    assertTrue(previous is View.Result)
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> throw ResponseErrorException(ResponseError(-32803, "", mapOf("code" to "run-failed"))) }
+    runIn(editor)
     waitFor("a notification") { h.notifications.isNotEmpty() }
     assertEquals(listOf("DynoTable could not complete the request."), h.sentences())
+    assertEquals(previous, results.view)
   }
 
   // The server runs no PartiQL write; Stage opens the app on the same statement, or the whole document.

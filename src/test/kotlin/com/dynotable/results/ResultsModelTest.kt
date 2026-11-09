@@ -36,6 +36,17 @@ class ResultsModelTest {
     )
   }
 
+  @Test
+  fun `one row reads in the singular`() {
+    assertEquals("1 row · 5 ms", summary(result("returnedRows" to 1.0)))
+  }
+
+  // A stored null is a value the user must see; a missing attribute is not.
+  @Test
+  fun `an explicit null shows null`() {
+    assertEquals(listOf(listOf("null")), resultView(one(null)).cells)
+  }
+
   // A null total is unknown: the returned count must not stand in for it.
   @Test
   fun `a null total says the total is unknown`() {

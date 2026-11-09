@@ -22,6 +22,8 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
+import com.intellij.openapi.actionSystem.ActionUiKind
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.application.ApplicationManager
@@ -61,7 +63,7 @@ const val DOCS_URL = "https://dynotable.com/docs/editors"
  * clients, the port-file watcher, the status and the reason actions.
  */
 @Service(Service.Level.PROJECT)
-class ConnectCore(private val project: Project, private val cs: CoroutineScope) : Disposable {
+class ConnectCore(private val project: Project, internal val cs: CoroutineScope) : Disposable {
   private val testMode = ApplicationManager.getApplication().isUnitTestMode
   private val overrides = Overrides.of(testMode, System::getProperty)
   private val platform = Platform.current()
@@ -124,10 +126,14 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
       val tables = CompletableDeferred<Listing<ListTablesResult>>()
       Explorer.getInstance(project).connected(attempt, client, tables)
       return try {
-        tables.complete(listingOf(client.sendRequest { (it as DynoTableServer).listTables(JsonObject()) }, ListTablesResult::from))
+        // A stop never completes a pending request: the session's end must end the wait.
+        val answer = machine.trackRun(holdsRestart = false) { client.sendRequest { (it as DynoTableServer).listTables(JsonObject()) } }
+        tables.complete(listingOf(answer, ListTablesResult::from))
+        null
+      } catch (_: SessionEnded) {
         null
       } catch (e: ResponseErrorException) {
-        tables.complete(Listing.Failed(e.responseError.message))
+        tables.complete(Listing.Failed(e.responseError.message.orEmpty()))
         when {
           e.responseError.code == METHOD_NOT_FOUND_CODE -> Reason.MISSING_REQUEST
           failureCode(e.responseError) == "profile-required" -> Reason.UNBOUND
@@ -174,9 +180,8 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
   suspend fun client(): LspClient? {
     val before = machine.status
     machine.ensureConnected()
+    session()?.let { return clientOf(it) }
     when (val status = machine.status) {
-      is Status.Connected -> return clientOf(status.attempt)
-      is Status.Unbound -> return clientOf(status.attempt)
       is Status.Disconnected -> if (!status.reason.latched || (before as? Status.Disconnected)?.reason?.latched == true) notify(status.reason)
       else -> notify(project, "DynoTable is reconnecting. Try again shortly.", NotificationType.INFORMATION)
     }
@@ -239,7 +244,7 @@ class ConnectCore(private val project: Project, private val cs: CoroutineScope) 
       Action.TRUST_PROJECT -> ApplicationManager.getApplication().invokeLater({
         // The platform's own dialog, with its warning. Its yes trusts the project and tells the listeners.
         val trust = ActionManager.getInstance().getAction(TRUST_ACTION) ?: return@invokeLater
-        ActionUtil.invokeAction(trust, SimpleDataContext.getProjectContext(project), ActionPlaces.NOTIFICATION, null, null)
+        ActionUtil.performAction(trust, AnActionEvent.createEvent(SimpleDataContext.getProjectContext(project), null, ActionPlaces.NOTIFICATION, ActionUiKind.NONE, null))
       }, project.disposed)
     }
   }

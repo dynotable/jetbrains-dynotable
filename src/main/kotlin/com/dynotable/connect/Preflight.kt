@@ -59,8 +59,9 @@ private object Silent : LanguageClient {
 
 /**
  * `initialize` with the token over the plugin's own socket, then `shutdown` and `exit`. The platform
- * only logs why its own `initialize` failed, so this tells the reason first. It sends no profile, so
- * the server binds nothing. It connects to the address the platform's socket channel uses.
+ * only logs why its own `initialize` failed, so this tells the reason first. It sends no profile: a
+ * roster of exactly one profile still binds it, for this short connection only. It connects to the
+ * address the platform's socket channel uses.
  */
 suspend fun runPreflight(file: PortFile): PreflightOutcome = withContext(Dispatchers.IO) {
   val socket = Socket()

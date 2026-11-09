@@ -15,7 +15,6 @@ import com.dynotable.query.IndexPicker
 import com.dynotable.query.NewQuery
 import com.dynotable.results.Results
 import com.dynotable.results.View
-import com.dynotable.run.RunRequest
 import com.dynotable.settings.DynoTableWorkspaceSettings
 import com.dynotable.profiles.RequestedProfile
 import com.dynotable.status.Action
@@ -323,7 +322,7 @@ class LiveTest {
     live.bind()
     val editor = open("open.dynotable.sql", "SELECT * FROM \"$ORDERS\"")
     h.notifications.clear()
-    ServerCommands.getInstance(project.get()).open(withContext(Dispatchers.EDT) { RunRequest.of(editor)!! })
+    ServerCommands.getInstance(project.get()).open(editor)
     delay(500)
     assertEquals(listOf(live.sentence("error-profile-window-required.json")), h.sentences())
   }

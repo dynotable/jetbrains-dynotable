@@ -53,6 +53,13 @@ data class CommandArgs(
         target = optional("target", ::string),
       )
     }
+
+    /** `null` when [value] is no command argument. */
+    fun orNull(value: Any?): CommandArgs? = try {
+      from(value)
+    } catch (_: ProtocolException) {
+      null
+    }
   }
 }
 

@@ -44,7 +44,10 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.DisabledOnOs
 import org.junit.jupiter.api.condition.OS
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
+import java.nio.file.Files
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.system.measureTimeMillis
@@ -122,6 +125,36 @@ class ConnectTest {
     h.awaitStatus(Status.Disconnected(Reason.SIGNED_OUT))
   }
 
+  // A killed app leaves its port file behind.
+  @Test
+  fun `a port file whose port refuses the connection starts the app`() = run {
+    h.fake.start()
+    val app = h.installApp(h.serving())
+    val closed = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+    h.portFile.writeText("""{"port":$closed,"token":"t","pid":${ProcessHandle.current().pid()}}""")
+    open("q.partiql")
+    connected()
+    assertEquals(1, app.starts)
+  }
+
+  @Test
+  fun `a server that closes the socket before it answers initialize latches connection-ended`() = run {
+    h.fake.onInitialize = { h.fake.sessions.forEach { it.socket.close() } }
+    h.fake.start()
+    open("q.partiql")
+    h.awaitStatus(Status.Disconnected(Reason.CONNECTION_ENDED))
+    assertEquals(0, h.fake.platformSessions())
+  }
+
+  @Test
+  fun `another initialize error latches start-failed`() = run {
+    h.fake.onInitialize = { throw ResponseErrorException(ResponseError(-32603, "Internal error", null)) }
+    h.fake.start()
+    open("q.partiql")
+    h.awaitStatus(Status.Disconnected(Reason.START_FAILED))
+    assertEquals(0, h.fake.platformSessions())
+  }
+
   // The app restarted with a new token: the reread finds it, and the refused socket's late close ends nothing.
   @Test
   fun `after a -32898 and a rotated port file, exactly one session lives`() = run {
@@ -179,7 +212,7 @@ class ConnectTest {
     open("q.partiql")
     h.awaitStatus(Status.Disconnected(Reason.UPDATE_APP))
     open("after.partiql")
-    delay(1000)
+    h.core.machine.awaitIdle()
     assertEquals(1, h.fake.initializeParams.size)
     assertEquals(0, h.fake.platformSessions())
   }
@@ -225,14 +258,13 @@ class ConnectTest {
     h.fake.close()
     h.awaitStatus(Status.Disconnected(Reason.CONNECTION_ENDED))
     open("next.partiql")
-    delay(1000)
+    h.core.machine.awaitIdle()
     assertEquals(0, app.starts)
     waitFor("no client") { h.clients().isEmpty() }
   }
 
   @Test
-  fun `a new port file reconnects, and a deleted one spawns nothing`() = run {
-    val app = h.installApp()
+  fun `a new port file reconnects`() = run {
     h.fake.start()
     open("q.partiql")
     val first = connected()
@@ -241,11 +273,49 @@ class ConnectTest {
       waitFor("a session on the new server") { second.platformSessions() == 1 }
       assertTrue(connected() > first)
       waitFor("the old session to end") { liveSessions() == 0 }
-      second.close()
-      h.awaitStatus(Status.Disconnected(Reason.CONNECTION_ENDED))
-      delay(1500)
-      assertEquals(0, app.starts)
     }
+  }
+
+  // A delete is no event: the app can be in the middle of a rewrite, and a spawn would start a second app.
+  @Test
+  fun `a port file deleted while the app serves spawns nothing and keeps the session`() = run {
+    val app = h.installApp(FakeRun.Hang)
+    h.fake.start()
+    open("q.partiql")
+    val attempt = connected()
+    val initializes = h.fake.initializeParams.size
+    Files.delete(h.portFile)
+    // The watcher polls every 500 ms; a fixed wait is the only sign that it saw the delete.
+    delay(1500)
+    assertEquals(Status.Connected(attempt), h.core.status)
+    assertEquals(initializes, h.fake.initializeParams.size)
+    assertEquals(0, app.starts)
+  }
+
+  // Only Reconnect or a new port file clears a latch.
+  @Test
+  fun `a sqlFiles change while latched starts nothing`() = run {
+    open("q.partiql")
+    h.awaitStatus(Status.Disconnected(Reason.NOT_INSTALLED))
+    val app = h.installApp(FakeRun.Hang)
+    val settings = DynoTableProjectSettings.getInstance(project.get())
+    try {
+      withContext(Dispatchers.EDT) { settings.sqlFiles = listOf("**/*.a.sql") }
+      // The change only schedules a restart, so a fixed wait.
+      delay(1000)
+      h.core.machine.awaitIdle()
+      assertEquals(Status.Disconnected(Reason.NOT_INSTALLED), h.core.status)
+      assertEquals(0, app.starts)
+    } finally {
+      withContext(Dispatchers.EDT) { settings.sqlFiles = emptyList() }
+    }
+  }
+
+  // Every project has the widget; it must not start the port-file watcher of a project with no DynoTable file.
+  @Test
+  fun `the status widget of a project with no DynoTable file starts no connection`() {
+    assertEquals("", StatusWidget(project.get()).getText())
+    assertNull(project.get().getServiceIfCreated(ConnectCore::class.java))
   }
 
   // Repeated settings changes during a start would each replace the session the one before made.
@@ -322,9 +392,8 @@ class ConnectTest {
   fun `opening a file returns at once while the server answers initialize slowly`() = run {
     h.fake.initializeDelayMs = 3000
     h.fake.start()
-    // The first editor of a project is slow for reasons of its own.
-    open("warm-up.txt")
-    assertTrue(measureTimeMillis { open("q.partiql") } < 1500)
+    open("q.partiql")
+    assertFalse(h.core.status is Status.Connected)
     connected()
   }
 
@@ -334,7 +403,8 @@ class ConnectTest {
     h.fake.start()
     val file = open("q.partiql")
     connected()
-    assertTrue(measureTimeMillis { assertTrue(h.core.awaitServerOpened(file)) } < 2000)
+    // A wait to the 3 s deadline would mean the sign did not end it.
+    assertTrue(measureTimeMillis { assertTrue(h.core.awaitServerOpened(file)) } < 3000)
     assertTrue(h.fake.opened(file.url))
     withContext(Dispatchers.EDT) { FileEditorManager.getInstance(project.get()).closeFile(file) }
     assertFalse(h.core.awaitServerOpened(file))

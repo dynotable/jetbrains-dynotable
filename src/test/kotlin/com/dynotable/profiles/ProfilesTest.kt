@@ -19,12 +19,6 @@ class ProfilesTest {
     assertEquals(listOf("Production", "production — DynamoDB, OpenSearch", null), listOf(item.text, item.detail, item.refusal))
   }
 
-  // An empty popup tells the user nothing.
-  @Test
-  fun `tells an empty roster to create a profile in DynoTable`() {
-    assertEquals(Picker.Empty("DynoTable has no profiles. Create a profile in DynoTable."), pickerOf(emptyList()))
-  }
-
   // `incomplete` is a code; the user needs a sentence, and must not bind an unbindable row.
   @Test
   fun `gives an incomplete row our sentence`() {
@@ -43,5 +37,7 @@ class ProfilesTest {
   @Test
   fun `a name that starts with html shows as text`() {
     assertEquals("​<html><img src=x>", item(row(name = "<html><img src=x>")).text)
+    // Swing reads the tag in any case.
+    assertEquals("​<HtMl><img src=x>", item(row(name = "<HtMl><img src=x>")).text)
   }
 }

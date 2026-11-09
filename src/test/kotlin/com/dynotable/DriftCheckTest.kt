@@ -65,6 +65,15 @@ class DriftCheckTest {
     assertTrue("missing: contract/new-fixture.json" in output, output)
   }
 
+  // A fixture made up here would test the plugin against an answer the app never gives.
+  @Test
+  fun `a local fixture that upstream lacks fails and names the file`() {
+    local.resolve("contract/local-only.json").writeText("{}\n")
+    val (exit, output) = driftCheck()
+    assertEquals(1, exit, output)
+    assertTrue("extra: contract/local-only.json" in output, output)
+  }
+
   @OptIn(ExperimentalPathApi::class)
   private fun copy(from: Path, to: Path) {
     to.parent.createDirectories()

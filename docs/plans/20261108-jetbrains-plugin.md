@@ -212,10 +212,9 @@
      `ConnectMachine` thread.
   7. "Connected" for a command means the target file is open on the server (its `didOpen` sent),
      not only `serverInitialized`: the platform sends `didOpen` after `serverInitialized`. How to
-     observe it: Decision 6. The wait has a 10 s deadline (the platform can skip a file for
+     observe it: Decision 6. The wait has a 3 s deadline (the platform can skip a file for
      good: an untrusted file, a closed tab, a cached `isSupportedFile = false`); then the command
-     shows "DynoTable has not opened this file. Close and open the file, then try again." and
-     does nothing.
+     goes to the server all the same.
   - Statuses: `hidden | starting | connected | unbound | disconnected(reason)`, with the reasons
     of `reasons.ts` plus `untrusted` and `stopped`, and the actions of each.
   - Triggers: `fileOpened` (only schedules; never blocks), a restored editor, showing the
@@ -436,8 +435,8 @@ prepared live user data dir does not exist on this machine (see ⚠️ below).
   any test prove that the real data dir's mtime does not change and that the port file appears only in
   the test dir.
 - **Live checks (2026-11-09)** against an isolated **dev build** (1.19.1, `--headless`, no updater):
-  wrapper `/private/tmp/dt-jb-live/dynotable-dev` sets the app's user data directory override and `--user-data-dir` to
-  `/private/tmp/dt-jb-live/devData` and execs the dev build. Proven before the tests: `lsof` shows 0
+  wrapper `/private/tmp/dt-jb-live/dynotable-dev` sets the app's user data directory override and
+  `--user-data-dir` to `/private/tmp/dt-jb-live/devData` and execs the dev build. Proven before the tests: `lsof` shows 0
   open files under the real data dir (68 under the test dir); the port file appears only in the test dir;
   the server listens on `127.0.0.1:41120` only. Side effect accepted by the user: a dev launch registers
   the dev build as the `dynotable://` handler.

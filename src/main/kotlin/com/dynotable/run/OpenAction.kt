@@ -20,7 +20,6 @@ class OpenAction : DumbAwareAction() {
 
   override fun actionPerformed(e: AnActionEvent) {
     val project = e.project ?: return
-    val request = RunRequest.of(e.getData(CommonDataKeys.EDITOR) ?: return) ?: return
-    ServerCommands.getInstance(project).launchOpen(request)
+    ServerCommands.getInstance(project).launchOpen(e.getData(CommonDataKeys.EDITOR) ?: return)
   }
 }

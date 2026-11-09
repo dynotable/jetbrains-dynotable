@@ -10,7 +10,25 @@
   ]]></description>
 
   <change-notes><![CDATA[
-    <p>0.1.0: first release.</p>
+    <p>0.1.0: first release. Needs a JetBrains IDE 2026.3 or later and DynoTable 1.19.0 or later.</p>
+    <ul>
+      <li>Language features from the DynoTable app for <code>*.dynotable.sql</code>, <code>*.partiql</code> and
+        <code>*.opensearch</code> files: completion, diagnostics with quick fixes, hover, formatting and alias
+        rename. Scratch files and files outside the project get them too.</li>
+      <li>The query plan shows in the lens row above the statement, after Run and Open in DynoTable.</li>
+      <li>Run a statement with the Run lens or Cmd+Enter (Ctrl+Enter). The rows show in the DynoTable Results
+        tool window, with Copy CSV, Copy JSON and Cancel.</li>
+      <li>Open in DynoTable with its lens or Cmd+Shift+Enter (Ctrl+Shift+Enter). Change the shortcuts in
+        Settings › Keymap.</li>
+      <li>Validate against the index, and Stage in DynoTable for PartiQL writes.</li>
+      <li>The DynoTable tool window: an explorer of the profile's DynamoDB tables and OpenSearch indices, with
+        Refresh. A double-click on a table or an index opens a query for it.</li>
+      <li>New Query, Pick OpenSearch Index, Attach SQL File, Select Profile, Reconnect and Open Documentation
+        actions, in Tools › DynoTable.</li>
+      <li>A status bar widget shows the profile, or why DynoTable is not connected and what to do.</li>
+      <li>The SQL files, App path and User data directory settings, in Settings › Tools › DynoTable.</li>
+      <li>Starts DynoTable in the background when it is not running.</li>
+    </ul>
   ]]></change-notes>
 
   <depends>com.intellij.modules.platform</depends>

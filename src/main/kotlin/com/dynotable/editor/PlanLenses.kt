@@ -1,7 +1,6 @@
 package com.dynotable.editor
 
 import com.dynotable.protocol.CommandArgs
-import com.dynotable.protocol.ProtocolException
 import com.dynotable.refusals.RUN_STATEMENT
 import com.dynotable.run.contains
 import org.eclipse.lsp4j.CodeLens
@@ -20,7 +19,7 @@ data class PlanLens(val anchor: Range, val title: String)
 fun planLenses(lenses: List<CodeLens>, hints: List<InlayHint>): List<PlanLens> {
   val statements = lenses.mapNotNull { lens ->
     val arg = lens.command?.takeIf { it.command == RUN_STATEMENT }?.arguments?.firstOrNull()
-    statementOf(arg)?.let { lens.range to it }
+    CommandArgs.orNull(arg)?.range?.let { lens.range to it }
   }
   return hints.map { hint ->
     val owner = statements.firstOrNull { (_, statement) -> contains(statement, hint.position) }?.first
@@ -29,10 +28,4 @@ fun planLenses(lenses: List<CodeLens>, hints: List<InlayHint>): List<PlanLens> {
     val text = if (label.isLeft) label.left else label.right.joinToString("") { it.value }
     PlanLens(owner ?: Range(start, start), text.trim())
   }
-}
-
-private fun statementOf(arg: Any?): Range? = try {
-  CommandArgs.from(arg).range
-} catch (_: ProtocolException) {
-  null
 }

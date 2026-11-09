@@ -37,7 +37,9 @@ interface DynoTableServer : LanguageServer {
 
 /** Starts nothing itself: the plugin starts its clients through [ConnectCore], after its preflight. */
 class DynoTableIntegrationProvider : LspIntegrationProvider {
-  // The platform calls this under a read lock: it must only schedule.
+  // The platform calls this under a read lock: it must only schedule. Besides editor opens (which
+  // EditorTrigger also sees), it calls it for each open file after a roots or file types change,
+  // when an open file can become a DynoTable file.
   override fun fileOpened(project: Project, file: VirtualFile, clientStarter: LspIntegrationProvider.LspClientStarter) {
     if (file.fileType is DynoTableFileType) ConnectCore.getInstance(project).trigger()
   }

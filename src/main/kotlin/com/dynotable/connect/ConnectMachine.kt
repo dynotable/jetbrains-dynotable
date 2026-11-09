@@ -71,16 +71,6 @@ interface ConnectSeams {
   fun onStatus(status: Status)
 }
 
-data class ConnectTimeouts(
-  /** Longer than the server's own 30 s handshake deadline, so the server's answer arrives first. */
-  val preflightMs: Long = 40_000,
-  /** How long a started client may take to show in the platform's list, not counting modal time. */
-  val listedMs: Long = 10_000,
-  /** How long a listed client may take to report `serverInitialized` or `serverStopped`. */
-  val reportMs: Long = 40_000,
-  val pollMs: Long = 100,
-)
-
 /** The session of a run ended before its answer: a latch, a stop or a retired descriptor. */
 class SessionEnded : Exception("The DynoTable session ended.")
 
@@ -96,7 +86,6 @@ class ConnectMachine(
   private val seams: ConnectSeams,
   private val scope: CoroutineScope,
   private val minAppVersion: String,
-  private val timeouts: ConnectTimeouts = ConnectTimeouts(),
 ) {
   private val dispatcher = checkNotNull(scope.coroutineContext[ContinuationInterceptor]) { "the scope needs a dispatcher" }
 
@@ -197,26 +186,21 @@ class ConnectMachine(
     }
   }
 
-  /** Ends [attempt]'s session and latches [reason]. A late call from an older attempt is ignored. */
-  suspend fun latch(attempt: Int, reason: Reason) {
-    withContext(dispatcher) {
-      if (live?.id == attempt) latchHere(reason)
-    }
-  }
-
   /**
    * Runs [block] as a request of the current session. A latch, a stop or a retire ends it at once
    * with [SessionEnded]. With [holdsRestart] (a query), a restart waits for it.
    */
   suspend fun <T> trackRun(holdsRestart: Boolean = true, block: suspend () -> T): T {
     val ended = CompletableDeferred<Unit>()
-    val current = withContext(dispatcher) {
-      val current = live?.takeIf { it.initialized && (status is Status.Connected || status is Status.Unbound) } ?: throw SessionEnded()
-      current.runs += ended
-      if (holdsRestart) runs++
-      current
-    }
+    // Set inside the block: a cancel just after the block drops the result of `withContext`, not the cleanup.
+    var registered: Live? = null
     try {
+      withContext(dispatcher) {
+        val current = live?.takeIf { it.initialized && (status is Status.Connected || status is Status.Unbound) } ?: throw SessionEnded()
+        current.runs += ended
+        if (holdsRestart) runs++
+        registered = current
+      }
       return coroutineScope {
         val work = async { block() }
         select {
@@ -228,7 +212,8 @@ class ConnectMachine(
         }
       }
     } finally {
-      withContext(NonCancellable + dispatcher) {
+      val current = registered
+      if (current != null) withContext(NonCancellable + dispatcher) {
         current.runs -= ended
         if (holdsRestart && --runs == 0) runWaiters.apply { forEach { it.complete(Unit) } }.clear()
       }
@@ -330,13 +315,16 @@ class ConnectMachine(
     var launched = false
     var authRetried = false
     while (true) {
+      // A closing project opens no socket and starts no app.
+      if (closing) return null
       val current = file
       val outcome = if (current == null || seams.isStale(current)) {
         PreflightOutcome.Stale
       } else {
         lastKey = current.key
-        withTimeoutOrNull(timeouts.preflightMs) { seams.preflight(current) } ?: return Reason.TIMED_OUT
+        withTimeoutOrNull(PREFLIGHT_MS) { seams.preflight(current) } ?: return Reason.TIMED_OUT
       }
+      if (closing) return null
       when (outcome) {
         PreflightOutcome.Stale -> {
           // A dead pid's file never reaches the preflight; its key still must not relaunch on a watcher event.
@@ -374,12 +362,12 @@ class ConnectMachine(
     seams.startClient(id, file)
     var waited = 0L
     while (!seams.isListed(id) && !current.report.isCompleted) {
-      delay(timeouts.pollMs)
-      if (!seams.modal()) waited += timeouts.pollMs
-      if (waited >= timeouts.listedMs) return Reason.START_FAILED
+      delay(POLL_MS)
+      if (!seams.modal()) waited += POLL_MS
+      if (waited >= LISTED_MS) return Reason.START_FAILED
     }
     // While closing, no event completes the report.
-    val initialized = withTimeoutOrNull(timeouts.reportMs) {
+    val initialized = withTimeoutOrNull(REPORT_MS) {
       select<Boolean> {
         current.report.onAwait { it }
         closed.onAwait { false }
@@ -444,4 +432,16 @@ class ConnectMachine(
   }
 
   private val PortFile.key get() = port to token
+
+  private companion object {
+    /** Longer than the server's own 30 s handshake deadline, so the server's answer arrives first. */
+    const val PREFLIGHT_MS = 40_000L
+
+    /** How long a started client may take to show in the platform's list, not counting modal time. */
+    const val LISTED_MS = 10_000L
+
+    /** How long a listed client may take to report `serverInitialized` or `serverStopped`. */
+    const val REPORT_MS = 40_000L
+    const val POLL_MS = 100L
+  }
 }

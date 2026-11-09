@@ -33,9 +33,13 @@ const val TEST_USER_DATA_DIR_PROPERTY = "dynotable.test.userDataDir"
 const val TEST_APP_ROOT_PROPERTY = "dynotable.test.appRoot"
 const val TEST_MIN_APP_VERSION_PROPERTY = "dynotable.test.minAppVersion"
 
+/** In test mode, an unset seam points here: a path that does not exist, never the real app or its data. */
+const val UNSET_TEST_SEAM = "/dynotable-test-seam-unset"
+
 /**
  * The test seams. Outside test mode they are never read, so an inherited property cannot point an
- * installed plugin at another app or another port file.
+ * installed plugin at another app or another port file. In test mode they are never `null`, so a
+ * test with no seam set cannot reach the real port file or an installed app.
  */
 data class Overrides(
   /** Replaces the port-file directory, but keeps the launcher on (the `userDataDir` setting turns it off). */
@@ -49,8 +53,8 @@ data class Overrides(
       if (!testMode) return Overrides(null, null, MIN_APP_VERSION)
       fun read(name: String) = property(name)?.ifEmpty { null }
       return Overrides(
-        read(TEST_USER_DATA_DIR_PROPERTY),
-        read(TEST_APP_ROOT_PROPERTY),
+        read(TEST_USER_DATA_DIR_PROPERTY) ?: UNSET_TEST_SEAM,
+        read(TEST_APP_ROOT_PROPERTY) ?: UNSET_TEST_SEAM,
         read(TEST_MIN_APP_VERSION_PROPERTY) ?: MIN_APP_VERSION,
       )
     }

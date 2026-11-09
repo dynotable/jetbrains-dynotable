@@ -55,7 +55,7 @@ fun refusalOf(failure: Failure, cancelled: Boolean, command: String): Refusal = 
       val code = failureCode(failure.error)
       // Stage sends openInApp: if its own refusal offered Stage again, each click would show it again.
       val actions = if (code == "stage-in-app") listOfNotNull(RefusalAction.STAGE.takeIf { command == RUN_STATEMENT }) else ACTIONS[code].orEmpty()
-      Refusal.Message(failure.error.message, actions)
+      Refusal.Message(failure.error.message.orEmpty(), actions)
     }
   }
 }

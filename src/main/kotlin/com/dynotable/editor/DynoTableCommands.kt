@@ -3,9 +3,9 @@ package com.dynotable.editor
 import com.dynotable.connect.ConnectCore
 import com.dynotable.connect.DynoTableServer
 import com.dynotable.connect.SessionEnded
+import com.dynotable.files.DynoTableFileType
 import com.dynotable.files.OpenSearchFileType
 import com.dynotable.protocol.CommandArgs
-import com.dynotable.protocol.ProtocolException
 import com.dynotable.refusals.Failure
 import com.dynotable.refusals.OPEN_IN_APP
 import com.dynotable.refusals.RUN_STATEMENT
@@ -23,8 +23,10 @@ import com.dynotable.status.Status
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.Lsp4jServer
@@ -32,7 +34,10 @@ import com.intellij.platform.lsp.api.LspClient
 import com.intellij.platform.lsp.api.customization.LspCommandsSupport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
 import org.eclipse.lsp4j.Command
 import org.eclipse.lsp4j.ExecuteCommandParams
@@ -81,7 +86,7 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
   /** `null` when the command did not answer; then the user has seen why, or the status says it. */
   suspend fun send(file: VirtualFile, command: String, args: List<Any?>): Answer? {
     val client = ready(file) ?: return null
-    if (command == RUN_STATEMENT && readable(args.firstOrNull())) {
+    if (command == RUN_STATEMENT && CommandArgs.orNull(args.firstOrNull()) != null) {
       runStatement(client, file, args.first())
       return null
     }
@@ -99,27 +104,26 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
     }
 
   /** A custom request of [client]'s session that shows nothing: the caller shows its failure. */
-  suspend fun <T> reply(client: LspClient, sender: (DynoTableServer) -> CompletableFuture<T>): Reply = try {
-    Answer(request(client, holdsRestart = false) { sender(it as DynoTableServer) })
-  } catch (e: CommandFailed) {
-    Unanswered(e.failure)
-  }
+  suspend fun <T> reply(client: LspClient, sender: (DynoTableServer) -> CompletableFuture<T>): Reply =
+    request(client, holdsRestart = false) { sender(it as DynoTableServer) }
 
-  private suspend fun command(client: LspClient, file: VirtualFile, command: String, args: List<Any?>): Answer? = try {
-    Answer(request(client, holdsRestart = false) { it.workspaceService.executeCommand(ExecuteCommandParams(command, args)) })
-  } catch (e: CommandFailed) {
-    report(file, e.failure, command, args)
-    null
-  }
+  private suspend fun command(client: LspClient, file: VirtualFile, command: String, args: List<Any?>): Answer? =
+    when (val reply = request(client, holdsRestart = false) { it.workspaceService.executeCommand(ExecuteCommandParams(command, args)) }) {
+      is Answer -> reply
+      is Unanswered -> {
+        report(file, reply.failure, command, args)
+        null
+      }
+    }
 
   /** For a caller on the EDT, which must not wait. */
-  fun launchRun(request: RunRequest) {
-    cs.launch { run(request) }
+  fun launchRun(editor: Editor) {
+    cs.launch { run(editor) }
   }
 
   /** Run: the selection, else the server's statement at the caret, else the whole document. */
-  suspend fun run(request: RunRequest) {
-    val client = ready(request.file) ?: return
+  suspend fun run(editor: Editor) {
+    val (client, request) = ready(editor) ?: return
     val uri = client.getDocumentIdentifier(request.file).uri
     val args = JsonObject().apply { addProperty("uri", uri) }
     if (request.selection != null) {
@@ -133,13 +137,13 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
   }
 
   /** For a caller on the EDT, which must not wait. */
-  fun launchOpen(request: RunRequest) {
-    cs.launch { open(request) }
+  fun launchOpen(editor: Editor) {
+    cs.launch { open(editor) }
   }
 
   /** Open in DynoTable: the server decides which statements get an Open lens, and with which argument. */
-  suspend fun open(request: RunRequest) {
-    val client = ready(request.file) ?: return
+  suspend fun open(editor: Editor) {
+    val (client, request) = ready(editor) ?: return
     val uri = client.getDocumentIdentifier(request.file).uri
     val lens = lensAtCaret(client, request, uri, OPEN_IN_APP, OPEN_CHANGED) ?: return
     if (lens.arg == null) {
@@ -154,19 +158,20 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
 
   /** The server's [command] lens at the caret; `null` once the user saw why nothing goes on. */
   private suspend fun lensAtCaret(client: LspClient, request: RunRequest, uri: String, command: String, changed: String): Lens? {
-    val lenses = try {
-      request(client, holdsRestart = false) { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) }
-    } catch (e: CommandFailed) {
-      // Going on without the lens could run or open statements the user did not mean.
-      report(request.file, e.failure, CODE_LENS, emptyList())
-      return null
+    val lenses = when (val reply = request(client, holdsRestart = false) { it.textDocumentService.codeLens(CodeLensParams(TextDocumentIdentifier(uri))) }) {
+      is Answer -> (reply.value as? List<*>).orEmpty().filterIsInstance<CodeLens>()
+      is Unanswered -> {
+        // Going on without the lens could run or open statements the user did not mean.
+        report(request.file, reply.failure, CODE_LENS, emptyList())
+        return null
+      }
     }
     // The lens ranges are for the text the request saw; on edited text one can select another statement.
     if (request.document.modificationStamp != request.stamp) {
       notify(project, changed, NotificationType.INFORMATION)
       return null
     }
-    return Lens(lensArgAt(lenses.orEmpty(), request.caret, command))
+    return Lens(lensArgAt(lenses, request.caret, command))
   }
 
   /** Connects, then checks that the server has [file] open: the client, or `null` once the user saw why. */
@@ -179,25 +184,34 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
     return client
   }
 
+  /** As [ready] for [editor]'s file, then reads what the user asks for in it now. */
+  private suspend fun ready(editor: Editor): Pair<LspClient, RunRequest>? {
+    val file = editor.virtualFile?.takeIf { it.fileType is DynoTableFileType } ?: return null
+    val client = ready(file) ?: return null
+    val request = withContext(Dispatchers.EDT) { if (editor.isDisposed) null else RunRequest.of(editor) } ?: return null
+    return client to request
+  }
+
   private suspend fun runStatement(client: LspClient, file: VirtualFile, args: Any?) {
     val outcome = Results.getInstance(project).execute {
-      request(client, holdsRestart = true) { it.workspaceService.executeCommand(ExecuteCommandParams(RUN_STATEMENT, listOf(args))) }
+      when (val reply = request(client, holdsRestart = true) { it.workspaceService.executeCommand(ExecuteCommandParams(RUN_STATEMENT, listOf(args))) }) {
+        is Answer -> reply.value
+        is Unanswered -> throw CommandFailed(reply.failure)
+      }
     }
     when (outcome) {
       RunOutcome.Ok -> {}
       RunOutcome.Busy -> notify(project, BUSY, NotificationType.WARNING)
       RunOutcome.Unreadable -> notify(project, UNREADABLE, NotificationType.ERROR)
-      is RunOutcome.Failed -> {
-        val failure = (outcome.error as? CommandFailed)?.failure ?: Failure.Error(ResponseError(0, outcome.error.message ?: outcome.error.toString(), null))
-        report(file, failure, RUN_STATEMENT, listOf(args), outcome.cancelled)
-      }
+      // Any other error is the user's own cancel, which needs no notification.
+      is RunOutcome.Failed -> (outcome.error as? CommandFailed)?.let { report(file, it.failure, RUN_STATEMENT, listOf(args), outcome.cancelled) }
     }
   }
 
   /** One request of the current session: a stop of the session fails it at once. */
-  private suspend fun <T> request(client: LspClient, holdsRestart: Boolean, sender: (Lsp4jServer) -> CompletableFuture<T>): T? {
+  private suspend fun <T> request(client: LspClient, holdsRestart: Boolean, sender: (Lsp4jServer) -> CompletableFuture<T>): Reply {
     val failure = try {
-      return core.machine.trackRun(holdsRestart) {
+      return Answer(core.machine.trackRun(holdsRestart) {
         var sent = false
         val value = client.sendRequest {
           sent = true
@@ -206,7 +220,7 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
         // The platform returns `null` without a call when the client is not running; `openInApp` answers `null` too.
         if (!sent) throw NotRunning()
         value
-      }
+      })
     } catch (e: CancellationException) {
       throw e
     } catch (e: ResponseErrorException) {
@@ -218,7 +232,7 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
     } catch (e: Exception) {
       Failure.Error(ResponseError(0, e.message ?: e.toString(), null))
     }
-    throw CommandFailed(failure)
+    return Unanswered(failure)
   }
 
   private fun report(file: VirtualFile?, failure: Failure, command: String, args: List<Any?>, cancelled: Boolean = false) {
@@ -248,14 +262,8 @@ class ServerCommands(private val project: Project, private val cs: CoroutineScop
 
   private class NotRunning : Exception()
 
+  /** How a failed run reaches [Results.execute], which tells a failure by its exception. */
   private class CommandFailed(val failure: Failure) : Exception()
-
-  private fun readable(arg: Any?) = try {
-    CommandArgs.from(arg)
-    true
-  } catch (_: ProtocolException) {
-    false
-  }
 
   companion object {
     fun getInstance(project: Project): ServerCommands = project.service()

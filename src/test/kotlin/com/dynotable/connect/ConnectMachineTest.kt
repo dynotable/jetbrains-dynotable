@@ -5,6 +5,7 @@ import com.dynotable.status.Reason
 import com.dynotable.status.Status
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -41,6 +42,13 @@ private class World(
   var modal: Boolean = false,
 ) : ConnectSeams {
   var failNextStatus = false
+
+  /** Runs before each preflight answers. */
+  var beforePreflight: suspend () -> Unit = {}
+
+  /** When set, each connect-time listing waits for its attempt's entry in [heldListings]. */
+  var holdListings = false
+  val heldListings = mutableMapOf<Int, CompletableDeferred<Reason?>>()
   val events = mutableListOf<String>()
   val stale = mutableSetOf<PortFile>()
   val listed = mutableSetOf<Int>()
@@ -60,6 +68,7 @@ private class World(
 
   override suspend fun preflight(file: PortFile): PreflightOutcome {
     events += "preflight ${file.port}"
+    beforePreflight()
     return answer(++preflights) ?: awaitCancellation()
   }
 
@@ -77,7 +86,8 @@ private class World(
 
   override suspend fun modal() = modal
 
-  override suspend fun connectTimeListing(attempt: Int) = listing
+  override suspend fun connectTimeListing(attempt: Int): Reason? =
+    if (holdListings) CompletableDeferred<Reason?>().also { heldListings[attempt] = it }.await() else listing
 
   override fun onStatus(status: Status) {
     if (failNextStatus) {
@@ -311,6 +321,21 @@ class ConnectMachineTest {
     assertEquals(Status.Starting(), machine.status)
   }
 
+  // The project closed while its preflight was in flight; the app it would start would outlive it.
+  @Test
+  fun `a close during a preflight that then finds the port stale launches nothing`() = runTest {
+    val gate = CompletableDeferred<Unit>()
+    val world = World(file = STALE, answer = { PreflightOutcome.Stale }, launch = { LaunchResult.Ready(FRESH) }).apply { beforePreflight = { gate.await() } }
+    val machine = machine(world)
+    machine.trigger()
+    runCurrent()
+    machine.close()
+    gate.complete(Unit)
+    runCurrent()
+    assertEquals(listOf("preflight 41120"), world.events)
+    assertEquals(Status.Starting(), machine.status)
+  }
+
   @Test
   fun `a restart during a start waits for it, then ends it before the next start`() = runTest {
     val world = World()
@@ -383,7 +408,7 @@ class ConnectMachineTest {
 
     val held = async { runCatching { machine.trackRun { awaitCancellation() } } }
     runCurrent()
-    machine.latch(2, Reason.MISSING_REQUEST)
+    world.stop(2, normal = false)
     assertTrue(held.await().exceptionOrNull() is SessionEnded)
   }
 
@@ -402,6 +427,25 @@ class ConnectMachineTest {
     advanceTimeBy(100)
     world.initialize(2)
     restarted.await()
+  }
+
+  // A Cancel at the very start of a run: a leaked count would hold every later restart for good.
+  @Test
+  fun `a run cancelled as it registers holds no later restart`() = runTest {
+    val world = World()
+    val machine = machine(world)
+    connect(world, machine)
+    val run = launch(start = CoroutineStart.UNDISPATCHED) { machine.trackRun { awaitCancellation() } }
+    // Queued after the registration and before the run resumes from it.
+    launch { run.cancel() }
+    runCurrent()
+    assertTrue(run.isCancelled)
+    val restarted = async { machine.restart() }
+    runCurrent()
+    advanceTimeBy(100)
+    world.initialize(2)
+    restarted.await()
+    assertEquals(Status.Connected(2), machine.status)
   }
 
   @Test
@@ -428,16 +472,18 @@ class ConnectMachineTest {
   // The connect-time listing of a replaced session answers late; it must not end the new one.
   @Test
   fun `a latch from an older attempt is ignored, and a latch is not replaced by connection-ended when its own stop arrives`() = runTest {
-    val world = World()
+    val world = World().apply { holdListings = true }
     val machine = machine(world)
     connect(world, machine)
     val restarted = async { machine.restart() }
     advanceTimeBy(100)
     world.initialize(2)
     restarted.await()
-    machine.latch(1, Reason.MISSING_REQUEST)
+    world.heldListings.getValue(1).complete(Reason.MISSING_REQUEST)
+    runCurrent()
     assertEquals(Status.Connected(2), machine.status)
-    machine.latch(2, Reason.MISSING_REQUEST)
+    world.heldListings.getValue(2).complete(Reason.MISSING_REQUEST)
+    runCurrent()
     world.stop(2, normal = false)
     runCurrent()
     assertEquals(latched(Reason.MISSING_REQUEST), machine.status)
@@ -476,14 +522,14 @@ class ConnectMachineTest {
     world.initialize(2)
     restarted.await()
 
-    machine.latch(2, Reason.SIGNED_OUT)
+    world.stop(2, normal = false)
     runCurrent()
     val latchedStops = world.events.count { it == "stop" }
     // The platform's Restart of a latched client.
     world.initialize(2)
     runCurrent()
     assertEquals(latchedStops + 1, world.events.count { it == "stop" })
-    assertEquals(latched(Reason.SIGNED_OUT), machine.status)
+    assertEquals(latched(Reason.CONNECTION_ENDED), machine.status)
   }
 
   @Test

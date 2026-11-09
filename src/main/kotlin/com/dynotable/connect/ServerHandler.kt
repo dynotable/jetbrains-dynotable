@@ -1,11 +1,13 @@
 package com.dynotable.connect
 
+import com.dynotable.ui.plain
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import org.eclipse.lsp4j.ApplyWorkspaceEditParams
 import org.eclipse.lsp4j.ApplyWorkspaceEditResponse
 import org.eclipse.lsp4j.ConfigurationParams
 import org.eclipse.lsp4j.Diagnostic
+import org.eclipse.lsp4j.MessageActionItem
 import org.eclipse.lsp4j.MessageParams
 import org.eclipse.lsp4j.PublishDiagnosticsParams
 import org.eclipse.lsp4j.RegistrationParams
@@ -43,11 +45,15 @@ class ServerHandler(
 
   override fun showMessage(params: MessageParams) = next.showMessage(MessageParams(params.type, escape(params.message)))
 
-  override fun showMessageRequest(params: ShowMessageRequestParams) =
-    next.showMessageRequest(ShowMessageRequestParams(params.actions).apply {
+  // The action titles show as labels, which render a text that starts with `<html>` as HTML.
+  override fun showMessageRequest(params: ShowMessageRequestParams): CompletableFuture<MessageActionItem> {
+    val actions = params.actions.orEmpty()
+    val shown = actions.map { MessageActionItem(plain(it.title.orEmpty())) }
+    return next.showMessageRequest(ShowMessageRequestParams(shown).apply {
       type = params.type
       message = escape(params.message)
-    })
+    }).thenApply { chosen -> actions.getOrNull(shown.indexOfFirst { it === chosen }) }
+  }
 
   private fun escape(text: String?) = StringUtil.escapeXmlEntities(text.orEmpty())
 

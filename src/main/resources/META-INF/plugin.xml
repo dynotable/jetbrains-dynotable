@@ -79,6 +79,7 @@
         implementationClass="org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider"/>
 
     <statusBarWidgetFactory id="DynoTable.Status" implementation="com.dynotable.ui.StatusWidgetFactory"/>
+    <statusBarWidgetFactory id="DynoTable.Totals" implementation="com.dynotable.results.TotalsWidgetFactory"/>
     <notificationGroup id="DynoTable" displayType="BALLOON"/>
     <toolWindow id="DynoTable Results" anchor="bottom" canCloseContents="true" icon="/icons/dynotable.svg"
                 factoryClass="com.dynotable.results.ResultsToolWindowFactory"/>

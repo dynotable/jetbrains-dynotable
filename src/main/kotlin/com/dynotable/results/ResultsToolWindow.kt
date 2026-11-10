@@ -3,48 +3,55 @@ package com.dynotable.results
 import com.dynotable.protocol.ProtocolException
 import com.dynotable.protocol.RunResult
 import com.dynotable.protocol.jsNumber
-import com.intellij.ide.CopyProvider
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.DataContext
-import com.intellij.openapi.actionSystem.DataSink
-import com.intellij.openapi.actionSystem.PlatformDataKeys
-import com.intellij.openapi.actionSystem.UiDataProvider
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
+import com.intellij.openapi.fileChooser.FileChooserFactory
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextArea
+import com.intellij.ui.components.JBPanelWithEmptyText
 import com.intellij.ui.content.ContentFactory
-import com.intellij.ui.table.JBTable
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.NamedColorUtil
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.datatransfer.StringSelection
+import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
+import javax.swing.Icon
+import javax.swing.JLabel
+import javax.swing.JPanel
+import javax.swing.plaf.basic.BasicHTML
+import javax.swing.table.TableCellRenderer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import java.awt.BorderLayout
-import java.awt.Component
-import java.awt.FlowLayout
-import java.awt.datatransfer.StringSelection
-import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.atomic.AtomicReference
-import javax.swing.JButton
-import javax.swing.JLabel
-import javax.swing.JPanel
-import javax.swing.plaf.basic.BasicHTML
-import javax.swing.table.AbstractTableModel
-import javax.swing.table.TableCellRenderer
 
 const val RESULTS_TOOL_WINDOW = "DynoTable Results"
 const val BUSY = "A DynoTable run is in progress. Cancel it in the DynoTable Results tool window, or wait for it to end."
@@ -69,6 +76,17 @@ class Results(private val project: Project) {
     private set
 
   private val current = AtomicReference<Run?>()
+
+  /** The totals of the grid's selected cells, for the status bar widget; empty when there are none. */
+  @Volatile
+  var totals = ""
+    private set
+
+  fun showTotals(text: String) {
+    if (text == totals) return
+    totals = text
+    TotalsWidget.update(project)
+  }
   private val listeners = CopyOnWriteArrayList<(View) -> Unit>()
 
   private class Run(val id: String) {
@@ -175,19 +193,25 @@ private fun addResultsContent(project: Project, window: ToolWindow) {
 }
 
 /** Shows the [Results] view. Every server string shows as plain text, never as Swing HTML. */
-class ResultsPanel(project: Project) : JPanel(BorderLayout()), Disposable {
+class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, true), Disposable {
   private val results = Results.getInstance(project)
-  internal val summary = plainLabel()
-  internal val copyCsv = JButton("Copy CSV")
-  internal val copyJson = JButton("Copy JSON")
-  internal val cancel = JButton("Cancel")
-  internal val statement = JBTextArea().apply {
-    isEditable = false
-    lineWrap = true
-  }
-  internal val table = ResultsTable()
-  internal val noRows = JBLabel("No rows.")
+  internal val summary = plainLabel().apply { foreground = NamedColorUtil.getInactiveTextColor() }
+  internal val grid = ResultsGrid(project, this)
+  internal val table get() = grid.table
+  internal val noRows = JBPanelWithEmptyText().withEmptyText("No rows.")
+  private val placeholder = JBPanelWithEmptyText()
   private val body = JPanel(BorderLayout())
+
+  internal val cancel = toolbarAction("Cancel Run", AllIcons.Actions.Suspend, { shown is View.Running }) {
+    (shown as? View.Running)?.let { results.cancel(it.runId) }
+  }
+  internal val copyCsv = toolbarAction("Copy All Rows as CSV", null, { shown is View.Result }) {
+    (shown as? View.Result)?.let { results.copy(it.run, asJson = false) }
+  }
+  internal val copyJson = toolbarAction("Copy All Rows as JSON", null, { shown is View.Result }) {
+    (shown as? View.Result)?.let { results.copy(it.run, asJson = true) }
+  }
+  private val export = toolbarAction("Export…", AllIcons.ToolbarDecorator.Export, { shown is View.Result }) { chooseExportFormat() }
 
   /** The view drawn last. */
   @Volatile
@@ -195,11 +219,20 @@ class ResultsPanel(project: Project) : JPanel(BorderLayout()), Disposable {
     private set
 
   init {
-    add(JPanel(FlowLayout(FlowLayout.LEFT)).apply { listOf(summary, copyCsv, copyJson, cancel).forEach(::add) }, BorderLayout.NORTH)
-    add(body, BorderLayout.CENTER)
-    cancel.addActionListener { (shown as? View.Running)?.let { results.cancel(it.runId) } }
-    copyCsv.addActionListener { (shown as? View.Result)?.let { results.copy(it.run, asJson = false) } }
-    copyJson.addActionListener { (shown as? View.Result)?.let { results.copy(it.run, asJson = true) } }
+    val copyAll = DefaultActionGroup("Copy All Rows", true).apply {
+      templatePresentation.icon = AllIcons.Actions.Copy
+      add(copyCsv)
+      add(copyJson)
+    }
+    val actions = ActionManager.getInstance().createActionToolbar("DynoTableResults", DefaultActionGroup(cancel, copyAll, export, Separator.getInstance(), grid.showFind, grid.showRecord, grid.openValue), true)
+    actions.targetComponent = this
+    toolbar = JPanel(BorderLayout()).apply {
+      border = JBUI.Borders.customLineBottom(JBColor.border())
+      add(actions.component, BorderLayout.WEST)
+      add(summary, BorderLayout.CENTER)
+      add(grid.toolbar, BorderLayout.EAST)
+    }
+    setContent(body)
     results.addListener(this) { view -> ApplicationManager.getApplication().invokeLater { render(view) } }
     render(results.view)
   }
@@ -207,74 +240,79 @@ class ResultsPanel(project: Project) : JPanel(BorderLayout()), Disposable {
   private fun render(view: View) {
     shown = view
     body.removeAll()
-    copyCsv.isVisible = view is View.Result
-    copyJson.isVisible = view is View.Result
-    cancel.isVisible = view is View.Running
-    summary.text = when (view) {
+    grid.toolbar.isVisible = view is View.Result && view.shown.columns.isNotEmpty()
+    summary.text = (view as? View.Result)?.shown?.summary.orEmpty()
+    placeholder.emptyText.text = when (view) {
       View.Empty -> "Run a statement to see its rows here."
       is View.Running -> "Running…"
       View.Cancelled -> "The run was cancelled."
-      is View.Result -> view.shown.summary
+      is View.Result -> ""
     }
     if (view is View.Result) {
-      statement.text = view.shown.executedStatement
-      body.add(statement, BorderLayout.NORTH)
-      table.show(view.shown)
-      body.add(if (view.shown.columns.isEmpty()) noRows else JBScrollPane(table), BorderLayout.CENTER)
+      grid.show(view.shown)
+      body.add(if (view.shown.columns.isEmpty()) noRows else grid, BorderLayout.CENTER)
+    } else {
+      body.add(placeholder, BorderLayout.CENTER)
+      results.showTotals("")
     }
     body.revalidate()
     body.repaint()
   }
 
-  // Removing the content ends the run, as closing the panel does in VS Code.
-  override fun dispose() = results.cancelRun()
-}
+  private fun chooseExportFormat() {
+    val result = shown as? View.Result ?: return
+    JBPopupFactory.getInstance().createPopupChooserBuilder(listOf("CSV", "JSON", "Markdown"))
+      .setTitle("Export Format")
+      .setItemChosenCallback { format -> export(result, format) }
+      .createPopup()
+      .showInCenterOf(this)
+  }
 
-/** Cmd/Ctrl+C copies the selected rows as the guarded CSV. */
-class ResultsTable : JBTable(), UiDataProvider {
-  private var rows: ResultView = ResultView("", emptyList(), emptyList(), "")
+  /** Writes all rows and all columns, as Copy All Rows does, to a file the user picks. */
+  private fun export(result: View.Result, format: String) {
+    val extension = when (format) {
+      "CSV" -> "csv"
+      "JSON" -> "json"
+      else -> "md"
+    }
+    val text = when (format) {
+      "CSV" -> toCsv(result.run)
+      "JSON" -> toJson(result.run)
+      else -> result.shown.let { selectionMarkdown(it, Selection(it.cells.indices.toList(), it.columns.indices.toList())) }
+    }
+    val target = FileChooserFactory.getInstance()
+      .createSaveFileDialog(FileSaverDescriptor("Export Results", "", extension), project)
+      .save("dynotable-results.$extension") ?: return
+    target.file.writeText(text)
+    val rows = result.shown.cells.size
+    // A balloon, not the status bar: the new UI shows no status bar text.
+    NotificationGroupManager.getInstance().getNotificationGroup("DynoTable")
+      .createNotification("Saved $rows ${if (rows == 1) "row" else "rows"} to ${StringUtil.escapeXmlEntities(target.file.name)}.", NotificationType.INFORMATION)
+      .notify(project)
+  }
 
-  private val copier = object : CopyProvider {
+  private fun toolbarAction(text: String, icon: Icon?, enabled: () -> Boolean, run: () -> Unit) = object : DumbAwareAction(text, null, icon) {
     override fun getActionUpdateThread() = ActionUpdateThread.EDT
 
-    override fun isCopyEnabled(dataContext: DataContext) = selectedRowCount > 0
-
-    override fun isCopyVisible(dataContext: DataContext) = true
-
-    override fun performCopy(dataContext: DataContext) {
-      val selected = selectedRows.map { rows.cells[convertRowIndexToModel(it)] }
-      CopyPasteManager.getInstance().setContents(StringSelection(csv(selected)))
+    override fun update(e: AnActionEvent) {
+      e.presentation.isEnabled = enabled()
     }
+
+    override fun actionPerformed(e: AnActionEvent) = run()
   }
 
-  init {
-    setDefaultRenderer(Any::class.java, plain(getDefaultRenderer(Any::class.java)))
-    tableHeader.defaultRenderer = plain(tableHeader.defaultRenderer)
-  }
-
-  fun show(view: ResultView) {
-    rows = view
-    model = object : AbstractTableModel() {
-      override fun getRowCount() = view.cells.size
-
-      override fun getColumnCount() = view.columns.size
-
-      override fun getColumnName(column: Int) = view.columns[column]
-
-      override fun getValueAt(row: Int, column: Int) = view.cells[row][column]
-    }
-  }
-
-  override fun uiDataSnapshot(sink: DataSink) {
-    sink[PlatformDataKeys.COPY_PROVIDER] = copier
+  // Removing the content ends the run, as closing the panel does in VS Code.
+  override fun dispose() {
+    results.cancelRun()
+    results.showTotals("")
   }
 }
 
 private const val HTML_DISABLE = "html.disable"
 
-private fun plainLabel() = JBLabel().apply { putClientProperty(HTML_DISABLE, true) }
+internal fun plainLabel() = JBLabel().apply { putClientProperty(HTML_DISABLE, true) }
 
-private fun plain(renderer: TableCellRenderer) = TableCellRenderer { table, value, selected, focused, row, column ->
+internal fun plain(renderer: TableCellRenderer) = TableCellRenderer { table, value, selected, focused, row, column ->
   renderer.getTableCellRendererComponent(table, value, selected, focused, row, column).also(::plain)
 }
 

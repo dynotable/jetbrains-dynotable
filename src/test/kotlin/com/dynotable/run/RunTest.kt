@@ -55,6 +55,7 @@ import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
+import com.intellij.util.ui.UIUtil
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -75,6 +76,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -85,6 +87,8 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JLabel
+import javax.swing.JComponent
+import javax.swing.JScrollPane
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import javax.swing.plaf.basic.BasicHTML
@@ -161,6 +165,14 @@ class RunTest {
     val window = manager.getToolWindow(RESULTS_TOOL_WINDOW)
       ?: manager.doRegisterToolWindow(RESULTS_TOOL_WINDOW).also { ResultsToolWindowFactory().createToolWindowContent(project.get(), it) }
     window.contentManager.contents.single().component as ResultsPanel
+  }
+
+  /** Runs a toolbar [action] as a click does: update first, then perform when it is enabled. */
+  private fun perform(action: AnAction) {
+    val event = TestActionEvent.createTestEvent(action, CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) {})
+    ActionUtil.updateAction(action, event)
+    assertTrue(event.presentation.isEnabled, "${action.templateText} is disabled")
+    ActionUtil.performAction(action, event)
   }
 
   private suspend fun clipboard(): String = withContext(Dispatchers.EDT) { CopyPasteManager.getInstance().getContents<String>(DataFlavor.stringFlavor)!! }
@@ -244,7 +256,7 @@ class RunTest {
 
   // A JLabel renders a text that starts with <html> as HTML, which can load an image from anywhere.
   @Test
-  fun `an integer cell shows 1, and a hostile column, cell and statement show as text`() = integrationTest {
+  fun `an integer cell shows 1, and a hostile column and cell show as text`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", hostile), listOf(mapOf("n" to 1, hostile to hostile)), hostile) }
     start()
@@ -254,26 +266,24 @@ class RunTest {
     withContext(Dispatchers.EDT) {
       val table = panel.table
       assertEquals("1", (table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0) as JLabel).text)
-      val header = table.tableHeader.defaultRenderer.getTableCellRendererComponent(table, table.getColumnName(1), false, false, -1, 1) as JLabel
+      val headerCell = table.tableHeader.defaultRenderer.getTableCellRendererComponent(table, table.getColumnName(1), false, false, -1, 1) as JComponent
+      val header = UIUtil.findComponentsOfType(headerCell, JLabel::class.java).first { it.text.isNotEmpty() }
       val cell = table.prepareRenderer(table.getCellRenderer(0, 1), 0, 1) as JLabel
       for (label in listOf(header, cell)) {
         assertEquals(hostile, label.text)
         assertNull(label.getClientProperty(BasicHTML.propertyKey), "an HTML view")
       }
-      // A text area never reads HTML.
-      assertEquals(hostile, panel.statement.text)
     }
   }
 
   @Test
-  fun `an empty result shows its statement and No rows, with no table`() = integrationTest {
+  fun `an empty result shows No rows, with no table`() = integrationTest {
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(emptyList(), emptyList(), "SELECT * FROM \"empty\"") }
     start()
     val panel = panel()
     runIn(open("empty.dynotable.sql"))
     waitFor("the result view") { panel.shown is View.Result }
     withContext(Dispatchers.EDT) {
-      assertEquals("SELECT * FROM \"empty\"", panel.statement.text)
       assertTrue(SwingUtilities.isDescendingFrom(panel.noRows, panel))
       assertFalse(SwingUtilities.isDescendingFrom(panel.table, panel))
     }
@@ -287,9 +297,9 @@ class RunTest {
     val panel = panel()
     runIn(open("copy.dynotable.sql"))
     waitFor("the result view") { panel.shown is View.Result }
-    withContext(Dispatchers.EDT) { panel.copyCsv.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.copyCsv) }
     assertEquals("v,n\r\n'=1+1,\"{\"\"qty\"\":1}\"", clipboard())
-    withContext(Dispatchers.EDT) { panel.copyJson.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.copyJson) }
     assertEquals("[\n  {\n    \"v\": \"=1+1\",\n    \"n\": {\n      \"qty\": 1\n    }\n  }\n]", clipboard())
     withContext(Dispatchers.EDT) {
       panel.table.setRowSelectionInterval(0, 0)
@@ -298,7 +308,98 @@ class RunTest {
       val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
       ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
     }
-    assertEquals("'=1+1,\"{\"\"qty\"\":1}\"", clipboard())
+    // Cmd+C copies like the IDE's data grids: TSV quoted as CSV, but with no formula guard.
+    assertEquals("=1+1\t\"{\"\"qty\"\":1}\"", clipboard())
+    // One cell copies its value as it is.
+    withContext(Dispatchers.EDT) {
+      panel.table.changeSelection(0, 1, false, false)
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { panel.table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
+    assertEquals("{\"qty\":1}", clipboard())
+  }
+
+  // Sort, filters, a frozen column and hidden columns all go through the view-to-model mapping; a copy
+  // that reads model order, or every column, copies cells the user does not see.
+  @Test
+  fun `the grid sorts, filters, freezes and copies only the shown cells in view order`() = integrationTest {
+    val rows = listOf(mapOf("n" to 10, "v" to "ten"), mapOf("n" to 9, "v" to "nine"), mapOf("n" to 100, "v" to "hundred"), mapOf("v" to "none"))
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", "v"), rows) }
+    start()
+    val panel = panel()
+    runIn(open("grid.dynotable.sql"))
+    waitFor("the result view") { panel.shown is View.Result }
+    val table = panel.table
+    fun column0() = (0 until table.rowCount).map { table.getValueAt(it, 0).toString() }
+    fun copy() {
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
+    withContext(Dispatchers.EDT) {
+      // The row numbers live in the scroll pane's row header; without it the gutter is gone.
+      val scroll = UIUtil.findComponentsOfType(panel.grid, JScrollPane::class.java).first { it.viewport.view === table }
+      assertNotNull(scroll.rowHeader?.view, "no row-number gutter")
+      // By value, and the missing value last in both directions.
+      table.rowSorter.toggleSortOrder(0)
+      assertEquals(listOf("9", "10", "100", ""), column0())
+      table.rowSorter.toggleSortOrder(0)
+      assertEquals(listOf("100", "10", "9", ""), column0())
+      panel.grid.find.filterRows.isSelected = true
+      panel.grid.find.field.text = "TEN"
+      assertEquals(1, table.rowCount)
+      assertEquals("1 of 4 rows shown", panel.grid.shownNote.text)
+      panel.grid.find.field.text = ""
+      table.setColumnFilter(1, setOf("nine", "none"))
+      assertEquals(listOf("9", ""), column0())
+      assertEquals("2 of 4 rows shown", panel.grid.shownNote.text)
+      table.setColumnFilter(1, null)
+      // A pinned column leaves the main grid but still comes first in a copy.
+      panel.grid.pin(0)
+      assertEquals(1, table.columnCount)
+      table.selectRows(0, 1)
+      copy()
+    }
+    assertEquals("100\thundred\r\n10\tten", clipboard())
+    withContext(Dispatchers.EDT) {
+      panel.grid.unpinAll()
+      assertEquals(listOf("n", "v"), (0 until table.columnCount).map(table::getColumnName))
+      table.columnModel.removeColumn(table.columnModel.getColumn(1))
+      table.setRowSelectionInterval(0, 1)
+      copy()
+    }
+    assertEquals("100\r\n10", clipboard())
+    // A click selects one cell, as in the IDE's data grids, not the whole row.
+    withContext(Dispatchers.EDT) {
+      table.createDefaultColumnsFromModel()
+      table.changeSelection(1, 0, false, false)
+      assertTrue(table.isCellSelected(1, 0))
+      assertFalse(table.isCellSelected(1, 1), "the click selected the whole row")
+    }
+  }
+
+  // A selection in the last column of a wide result named a column the next, narrower result lacks; the
+  // side panel read it and threw, so the new rows never showed.
+  @Test
+  fun `a narrower result after a selection in a wide one shows its rows`() = integrationTest {
+    var wide = true
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ ->
+      if (wide) answer(listOf("a", "b", "c"), listOf(mapOf("a" to 1, "b" to 2, "c" to 3))) else answer(listOf("x"), listOf(mapOf("x" to 9), mapOf("x" to 8)))
+    }
+    start()
+    val panel = panel()
+    val editor = open("narrow.dynotable.sql")
+    runIn(editor)
+    waitFor("the wide result") { (panel.shown as? View.Result)?.run?.columns?.size == 3 }
+    withContext(Dispatchers.EDT) { panel.table.changeSelection(0, 2, false, false) }
+    wide = false
+    runIn(editor)
+    waitFor("the narrow result") { (panel.shown as? View.Result)?.run?.columns?.size == 1 }
+    withContext(Dispatchers.EDT) {
+      assertEquals(2, panel.table.rowCount)
+      assertEquals("", panel.grid.shownNote.text)
+    }
   }
 
   @Test
@@ -307,7 +408,7 @@ class RunTest {
     val panel = panel()
     val job = heldRun(open("cancel.partiql", "SELECT * FROM \"orders\""))
     waitFor("the running view drawn") { panel.shown is View.Running }
-    withContext(Dispatchers.EDT) { panel.cancel.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.cancel) }
     job.join()
     waitFor("the cancel") { cancels().size == 1 }
     assertEquals(View.Cancelled, results.view)

@@ -5,8 +5,28 @@
 
   <description><![CDATA[
     <p>Write SQL and PartiQL for DynamoDB, and SQL and the query DSL for OpenSearch, in JetBrains IDEs.
-    The DynoTable desktop app serves the language features and runs the queries.</p>
-    <p>Requires the DynoTable desktop app, version 1.19.0 or later, with the Editor integration switched on.</p>
+    The <a href="https://dynotable.com">DynoTable</a> desktop app serves the language features and runs
+    the queries.</p>
+    <ul>
+      <li>Completion from your real table schemas and index mappings.</li>
+      <li>Diagnostics with quick fixes, hover, the query plan above each statement, formatting, and rename of
+        table aliases.</li>
+      <li><b>Run</b> a statement with Cmd+Enter (Ctrl+Enter). The rows show in the DynoTable Results tool
+        window.</li>
+      <li>An explorer of the DynamoDB tables and OpenSearch indices of your DynoTable profile.</li>
+      <li><b>Open in DynoTable</b> opens the app at the statement's table or index.</li>
+    </ul>
+    <p>Query files: <code>*.dynotable.sql</code> (DynoTable SQL), <code>*.partiql</code> (DynamoDB PartiQL)
+    and <code>*.opensearch</code> (an OpenSearch query). To start, run
+    <b>Tools › DynoTable › New DynoTable Query</b>.</p>
+    <p><b>Requirements</b></p>
+    <ul>
+      <li>The DynoTable desktop app, version 1.19.0 or later, on the same computer.</li>
+      <li>The Editor integration switched on in the app: <b>Settings › Editor integration</b>. It is off by
+        default. You do this one time. After that, the plugin starts DynoTable when it needs the app.</li>
+      <li>A trusted project.</li>
+    </ul>
+    <p>Full guide: <a href="https://dynotable.com/docs/editors">dynotable.com/docs/editors</a>.</p>
   ]]></description>
 
   <change-notes><![CDATA[

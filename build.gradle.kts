@@ -16,7 +16,10 @@ repositories {
   intellijPlatform { defaultRepositories() }
 }
 
-kotlin { jvmToolchain(21) }
+kotlin {
+  jvmToolchain(21)
+  compilerOptions { jvmDefault.set(org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY) }
+}
 
 dependencies {
   intellijPlatform {

@@ -12,8 +12,6 @@ desktop app serves the language features and runs the queries.
 
 Full guide: [dynotable.com/docs/editors](https://dynotable.com/docs/editors).
 
-This plugin is in development. It has no release yet.
-
 ## Examples
 
 A SQL JOIN, in `orders.dynotable.sql`:

@@ -379,6 +379,29 @@ class RunTest {
     }
   }
 
+  // A selection in the last column of a wide result named a column the next, narrower result lacks; the
+  // side panel read it and threw, so the new rows never showed.
+  @Test
+  fun `a narrower result after a selection in a wide one shows its rows`() = integrationTest {
+    var wide = true
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ ->
+      if (wide) answer(listOf("a", "b", "c"), listOf(mapOf("a" to 1, "b" to 2, "c" to 3))) else answer(listOf("x"), listOf(mapOf("x" to 9), mapOf("x" to 8)))
+    }
+    start()
+    val panel = panel()
+    val editor = open("narrow.dynotable.sql")
+    runIn(editor)
+    waitFor("the wide result") { (panel.shown as? View.Result)?.run?.columns?.size == 3 }
+    withContext(Dispatchers.EDT) { panel.table.changeSelection(0, 2, false, false) }
+    wide = false
+    runIn(editor)
+    waitFor("the narrow result") { (panel.shown as? View.Result)?.run?.columns?.size == 1 }
+    withContext(Dispatchers.EDT) {
+      assertEquals(2, panel.table.rowCount)
+      assertEquals("", panel.grid.shownNote.text)
+    }
+  }
+
   @Test
   fun `Cancel sends a cancel for the run, shows the cancelled view and no notification`() = integrationTest {
     start()

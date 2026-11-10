@@ -164,6 +164,8 @@ class ResultsTable : JBTable(), UiDataProvider {
   }
 
   fun show(next: ResultView) {
+    // The old selection names cells of the old result; listeners must not read it against the new one.
+    clearSelection()
     view = next
     model = object : AbstractTableModel() {
       override fun getRowCount() = next.cells.size
@@ -222,7 +224,7 @@ class ResultsTable : JBTable(), UiDataProvider {
   }
 
   /** Model indices of the shown columns, in view order: the pinned columns first. */
-  fun visibleColumns(): List<Int> = frozenColumns() + (0 until columnCount).map(::convertColumnIndexToModel)
+  fun visibleColumns(): List<Int> = (frozenColumns() + (0 until columnCount).map(::convertColumnIndexToModel)).filter { it < view.columns.size }
 
   private fun frozenColumns(): List<Int> = frozen?.let { f -> (0 until f.columnCount).map(f::convertColumnIndexToModel) }.orEmpty()
 
@@ -301,8 +303,10 @@ class ResultsTable : JBTable(), UiDataProvider {
     frozen?.takeIf { it.columnCount > 0 }?.let { it.setColumnSelectionInterval(0, it.columnCount - 1) }
   }
 
-  /** The cell the caret is on, as model indices. */
-  fun currentCell(): Pair<Int, Int>? {
+  /** The cell the caret is on, as model indices; null while a model swap leaves the selection stale. */
+  fun currentCell(): Pair<Int, Int>? = caretCell()?.takeIf { (row, column) -> row < view.cells.size && column < view.columns.size }
+
+  private fun caretCell(): Pair<Int, Int>? {
     val row = selectionModel.leadSelectionIndex.takeIf { it in 0 until rowCount } ?: return null
     val f = frozen
     if (f != null && frozenIsCurrent && f.columnCount > 0) {

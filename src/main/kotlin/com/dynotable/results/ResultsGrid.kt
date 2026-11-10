@@ -389,9 +389,13 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
   }
   internal val find = FindBar(table) { refresh() }
   private val rowNumbers = RowNumbers()
+  private var numbersWidth = 0
 
   // A second table, so each number has the exact height and baseline of its row.
-  private val numbers = JBTable(rowNumbers).apply {
+  // Its size is set here: inside the row header panel, a table's own preferred width collapses.
+  private val numbers = object : JBTable(rowNumbers) {
+    override fun getPreferredSize() = java.awt.Dimension(numbersWidth, rowCount * rowHeight)
+  }.apply {
     autoResizeMode = JTable.AUTO_RESIZE_OFF
     font = table.font
     rowHeight = table.rowHeight
@@ -418,14 +422,16 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
   }
 
   // The row header: the row numbers, then the frozen column while Freeze First Column is on.
-  private val rowHeader = JPanel(BorderLayout()).apply { add(numbers, BorderLayout.WEST) }
+  private val rowHeaderPanel = object : JPanel(BorderLayout()) {
+    override fun getPreferredSize() = java.awt.Dimension(numbersWidth + (table.frozen?.columnModel?.totalColumnWidth ?: 0), numbers.preferredSize.height)
+  }.apply { add(numbers, BorderLayout.WEST) }
   private val numbersCorner = JPanel().apply {
     background = UIUtil.getPanelBackground()
     border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 1)
   }
   private val corner = JPanel(BorderLayout()).apply { add(numbersCorner, BorderLayout.WEST) }
   private val scroll = ScrollPaneFactory.createScrollPane(table, true).apply {
-    setRowHeaderView(rowHeader)
+    setRowHeaderView(rowHeaderPanel)
     this.rowHeader.background = gridBackground()
     viewport.background = gridBackground()
     setCorner(ScrollPaneConstants.UPPER_LEFT_CORNER, corner)
@@ -594,12 +600,12 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
         })
       }
       table.frozen = frozen
-      rowHeader.add(frozen, BorderLayout.CENTER)
+      rowHeaderPanel.add(frozen, BorderLayout.CENTER)
       corner.add(frozen.tableHeader, BorderLayout.CENTER)
     } else {
       current!!
       val column = current.columnModel.getColumn(0)
-      rowHeader.remove(current)
+      rowHeaderPanel.remove(current)
       corner.remove(current.tableHeader)
       table.frozen = null
       table.frozenIsCurrent = false
@@ -673,6 +679,7 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
     rowNumbers.update(table.rowCount)
     val digits = table.rowCount.coerceAtLeast(1).toString().length
     val width = numbers.getFontMetrics(numbers.font).charWidth('0') * digits + JBUI.scale(14)
+    numbersWidth = width
     numbers.columnModel.getColumn(0).apply {
       preferredWidth = width
       this.width = width

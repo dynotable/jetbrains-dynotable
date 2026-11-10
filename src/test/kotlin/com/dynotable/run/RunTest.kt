@@ -76,6 +76,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -87,6 +88,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JLabel
 import javax.swing.JComponent
+import javax.swing.JScrollPane
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import javax.swing.plaf.basic.BasicHTML
@@ -328,6 +330,9 @@ class RunTest {
       ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
     }
     withContext(Dispatchers.EDT) {
+      // The row numbers live in the scroll pane's row header; without it the gutter is gone.
+      val scroll = UIUtil.findComponentsOfType(panel.grid, JScrollPane::class.java).first { it.viewport.view === table }
+      assertNotNull(scroll.rowHeader?.view, "no row-number gutter")
       // By value, and the missing value last in both directions.
       table.rowSorter.toggleSortOrder(0)
       assertEquals(listOf("9", "10", "100", ""), column0())

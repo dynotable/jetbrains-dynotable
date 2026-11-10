@@ -14,6 +14,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.fileChooser.FileSaverDescriptor
@@ -22,6 +24,7 @@ import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -270,7 +273,10 @@ class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, t
       .save("dynotable-results.$extension") ?: return
     target.file.writeText(text)
     val rows = result.shown.cells.size
-    StatusBar.Info.set("Saved $rows ${if (rows == 1) "row" else "rows"} to ${target.file.name}.", project)
+    // A balloon, not the status bar: the new UI shows no status bar text.
+    NotificationGroupManager.getInstance().getNotificationGroup("DynoTable")
+      .createNotification("Saved $rows ${if (rows == 1) "row" else "rows"} to ${StringUtil.escapeXmlEntities(target.file.name)}.", NotificationType.INFORMATION)
+      .notify(project)
   }
 
   private fun toolbarAction(text: String, icon: Icon?, enabled: () -> Boolean, run: () -> Unit) = object : DumbAwareAction(text, null, icon) {

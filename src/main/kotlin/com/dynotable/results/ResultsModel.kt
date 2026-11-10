@@ -92,11 +92,14 @@ data class Selection(val rows: List<Int>, val columns: List<Int>)
 
 fun selectionCsv(view: ResultView, selection: Selection, header: Boolean): String = delimited(view, selection, header, ',')
 
-/** What Cmd/Ctrl+C copies: tab-separated, with the same formula guard and quoting as CSV. */
-fun selectionTsv(view: ResultView, selection: Selection, header: Boolean): String = delimited(view, selection, header, '\t')
+/**
+ * What Cmd/Ctrl+C copies for two or more cells: tab-separated, quoted as CSV quotes, but with no
+ * formula guard, as the IDE's data grids copy. One cell copies its value as it is.
+ */
+fun selectionTsv(view: ResultView, selection: Selection, header: Boolean): String = delimited(view, selection, header, '\t', guard = false)
 
-private fun delimited(view: ResultView, selection: Selection, header: Boolean, delimiter: Char): String =
-  delimitedLines((if (header) listOf(selection.columns.map { view.columns[it] }) else emptyList()) + selection.rows.map { r -> selection.columns.map { view.cells[r][it] } }, delimiter)
+private fun delimited(view: ResultView, selection: Selection, header: Boolean, delimiter: Char, guard: Boolean = true): String =
+  delimitedLines((if (header) listOf(selection.columns.map { view.columns[it] }) else emptyList()) + selection.rows.map { r -> selection.columns.map { view.cells[r][it] } }, delimiter, guard)
 
 /** Copy Column: the values of the given rows, one per line. Plain text, not CSV: no header, no guard. */
 fun columnText(view: ResultView, rows: List<Int>, column: Int): String = rows.joinToString("\n") { view.cells[it][column] }
@@ -167,13 +170,13 @@ private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][+-]?\d+)?""")
 private const val FORMULA_START = "=+-@\t\r\n"
 
 /** A spreadsheet runs a cell that starts with a formula character, unless it is a plain number. */
-private fun delimitedField(text: String, delimiter: Char): String {
-  val guarded = if (text.isNotEmpty() && text[0] in FORMULA_START && !NUMBER.matches(text)) "'$text" else text
+private fun delimitedField(text: String, delimiter: Char, guard: Boolean): String {
+  val guarded = if (guard && text.isNotEmpty() && text[0] in FORMULA_START && !NUMBER.matches(text)) "'$text" else text
   return if (guarded.any { it == '"' || it == delimiter || it == '\r' || it == '\n' }) "\"${guarded.replace("\"", "\"\"")}\"" else guarded
 }
 
-private fun delimitedLines(lines: List<List<String>>, delimiter: Char): String =
-  lines.joinToString("\r\n") { line -> line.joinToString(delimiter.toString()) { delimitedField(it, delimiter) } }
+private fun delimitedLines(lines: List<List<String>>, delimiter: Char, guard: Boolean = true): String =
+  lines.joinToString("\r\n") { line -> line.joinToString(delimiter.toString()) { delimitedField(it, delimiter, guard) } }
 
 fun csv(lines: List<List<String>>): String = delimitedLines(lines, ',')
 

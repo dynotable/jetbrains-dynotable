@@ -76,6 +76,17 @@ class Results(private val project: Project) {
     private set
 
   private val current = AtomicReference<Run?>()
+
+  /** The totals of the grid's selected cells, for the status bar widget; empty when there are none. */
+  @Volatile
+  var totals = ""
+    private set
+
+  fun showTotals(text: String) {
+    if (text == totals) return
+    totals = text
+    TotalsWidget.update(project)
+  }
   private val listeners = CopyOnWriteArrayList<(View) -> Unit>()
 
   private class Run(val id: String) {
@@ -242,6 +253,7 @@ class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, t
       body.add(if (view.shown.columns.isEmpty()) noRows else grid, BorderLayout.CENTER)
     } else {
       body.add(placeholder, BorderLayout.CENTER)
+      results.showTotals("")
     }
     body.revalidate()
     body.repaint()
@@ -290,7 +302,10 @@ class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, t
   }
 
   // Removing the content ends the run, as closing the panel does in VS Code.
-  override fun dispose() = results.cancelRun()
+  override fun dispose() {
+    results.cancelRun()
+    results.showTotals("")
+  }
 }
 
 private const val HTML_DISABLE = "html.disable"

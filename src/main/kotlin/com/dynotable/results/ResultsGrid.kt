@@ -116,10 +116,10 @@ class ResultsTable : JBTable(), UiDataProvider {
   internal var columnFilters: Map<Int, Set<String?>> = emptyMap()
     private set
 
-  /** The frozen first column's table, beside the row numbers, while Freeze First Column is on. */
+  /** The pinned columns' table, beside the row numbers, while a column is pinned. */
   internal var frozen: JTable? = null
 
-  /** True when the caret is in the frozen column, so the current cell is there. */
+  /** True when the caret is in a pinned column, so the current cell is there. */
   internal var frozenIsCurrent = false
 
   internal val cellRenderer: TableCellRenderer = plain(CellRenderer())
@@ -139,11 +139,12 @@ class ResultsTable : JBTable(), UiDataProvider {
 
     override fun isCopyVisible(dataContext: DataContext) = true
 
-    // Tab-separated, as a spreadsheet paste reads it, with no header; an empty selection copies nothing.
+    // As the IDE's data grids copy: one cell as its value, more cells tab-separated with no header.
     override fun performCopy(dataContext: DataContext) {
       val selection = selection()
       if (selection.rows.isEmpty() || selection.columns.isEmpty()) return
-      CopyPasteManager.getInstance().setContents(StringSelection(selectionTsv(view, selection, header = false)))
+      val text = if (selection.rows.size == 1 && selection.columns.size == 1) view.cells[selection.rows[0]][selection.columns[0]] else selectionTsv(view, selection, header = false)
+      CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
   }
 
@@ -220,7 +221,7 @@ class ResultsTable : JBTable(), UiDataProvider {
     }
   }
 
-  /** Model indices of the shown columns, in view order: the frozen column first. */
+  /** Model indices of the shown columns, in view order: the pinned columns first. */
   fun visibleColumns(): List<Int> = frozenColumns() + (0 until columnCount).map(::convertColumnIndexToModel)
 
   private fun frozenColumns(): List<Int> = frozen?.let { f -> (0 until f.columnCount).map(f::convertColumnIndexToModel) }.orEmpty()
@@ -231,7 +232,7 @@ class ResultsTable : JBTable(), UiDataProvider {
    * every cell where they cross. With no column selected (rows picked in the gutter), every shown column.
    */
   fun selection(): Selection {
-    val frozenSelected = frozen?.takeIf { it.selectedColumnCount > 0 }?.let { frozenColumns() }.orEmpty()
+    val frozenSelected = frozen?.let { f -> f.selectedColumns.map(f::convertColumnIndexToModel) }.orEmpty()
     val columns = frozenSelected + selectedColumns.map(::convertColumnIndexToModel)
     return Selection(selectedRows.map(::convertRowIndexToModel), columns.ifEmpty { visibleColumns() })
   }
@@ -292,19 +293,22 @@ class ResultsTable : JBTable(), UiDataProvider {
     setRowSelectionInterval(0, rowCount - 1)
   }
 
-  /** Whole rows: every shown column, the frozen one too. */
+  /** Whole rows: every shown column, the pinned ones too. */
   fun selectRows(from: Int, to: Int) {
     if (columnCount == 0) return
     setRowSelectionInterval(from, to)
     setColumnSelectionInterval(0, columnCount - 1)
-    frozen?.takeIf { it.columnCount > 0 }?.setColumnSelectionInterval(0, 0)
+    frozen?.takeIf { it.columnCount > 0 }?.let { it.setColumnSelectionInterval(0, it.columnCount - 1) }
   }
 
   /** The cell the caret is on, as model indices. */
   fun currentCell(): Pair<Int, Int>? {
     val row = selectionModel.leadSelectionIndex.takeIf { it in 0 until rowCount } ?: return null
     val f = frozen
-    if (f != null && frozenIsCurrent && f.columnCount > 0) return convertRowIndexToModel(row) to f.convertColumnIndexToModel(0)
+    if (f != null && frozenIsCurrent && f.columnCount > 0) {
+      val column = f.columnModel.selectionModel.leadSelectionIndex.takeIf { it in 0 until f.columnCount } ?: 0
+      return convertRowIndexToModel(row) to f.convertColumnIndexToModel(column)
+    }
     if (columnCount == 0) return null
     val column = columnModel.selectionModel.leadSelectionIndex.takeIf { it in 0 until columnCount } ?: 0
     return convertRowIndexToModel(row) to convertColumnIndexToModel(column)
@@ -416,10 +420,6 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
     })
   }
   private val details = DetailsPanel(project, table)
-  internal val totalsLine = plainLabel().apply {
-    foreground = NamedColorUtil.getInactiveTextColor()
-    border = JBUI.Borders.empty(2, 8)
-  }
 
   // The row header: the row numbers, then the frozen column while Freeze First Column is on.
   private val rowHeaderPanel = object : JPanel(BorderLayout()) {
@@ -438,10 +438,7 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
     numbers.border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 0, 1)
   }
   private val splitter = JBSplitter(false, 0.7f).apply {
-    firstComponent = JPanel(BorderLayout()).apply {
-      add(scroll, BorderLayout.CENTER)
-      add(totalsLine, BorderLayout.SOUTH)
-    }
+    firstComponent = scroll
   }
 
   val showFind: AnAction = object : DumbAwareAction("Find", "Find text in the cells", AllIcons.Actions.Search) {
@@ -547,7 +544,7 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
 
   fun show(view: ResultView) {
     find.reset()
-    freeze(false)
+    unpinAll()
     table.show(view)
     table.rowSorter.addRowSorterListener {
       refresh()
@@ -560,61 +557,87 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
 
   private fun selectionChanged() {
     details.update()
-    totalsLine.text = table.selectionTotals().orEmpty()
-    totalsLine.isVisible = totalsLine.text.isNotEmpty()
+    Results.getInstance(project).showTotals(table.selectionTotals().orEmpty())
   }
 
   /**
-   * Freeze First Column: the first shown column moves to a second table beside the row numbers, so it
-   * stays in view while the grid scrolls. Both tables share the rows, their order and the row selection.
+   * Pin Column, as in the IDE's data grids: the column moves to a second table beside the row numbers,
+   * so it stays in view while the grid scrolls. Both tables share the rows, their order and the row
+   * selection. A new result unpins every column.
    */
-  internal fun freeze(on: Boolean) {
-    val current = table.frozen
-    if (on == (current != null)) return
-    if (on) {
-      if (table.columnCount < 2) return
-      val column = table.columnModel.getColumn(0)
-      table.columnModel.removeColumn(column)
-      val frozen = JBTable(table.model, DefaultTableColumnModel().apply { addColumn(column) }).apply {
-        autoCreateColumnsFromModel = false
-        rowSorter = table.rowSorter
-        selectionModel = table.selectionModel
-        setCellSelectionEnabled(true)
-        font = table.font
-        rowHeight = table.rowHeight
-        setShowGrid(true)
-        gridColor = JBColor.border()
-        background = gridBackground()
-        autoResizeMode = JTable.AUTO_RESIZE_OFF
-        tableHeader.defaultRenderer = table.headerRenderer
-        tableHeader.reorderingAllowed = false
-        setDefaultRenderer(Any::class.java, table.cellRenderer)
-        preferredScrollableViewportSize = java.awt.Dimension(column.width, 0)
-        border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 0, 1)
-        addMouseListener(object : MouseAdapter() {
-          override fun mousePressed(e: MouseEvent) {
-            table.frozenIsCurrent = true
-            table.columnModel.selectionModel.clearSelection()
-            selectionChanged()
-          }
-        })
-      }
-      table.frozen = frozen
-      rowHeaderPanel.add(frozen, BorderLayout.CENTER)
-      corner.add(frozen.tableHeader, BorderLayout.CENTER)
-    } else {
-      current!!
-      val column = current.columnModel.getColumn(0)
-      rowHeaderPanel.remove(current)
-      corner.remove(current.tableHeader)
+  internal fun pin(viewColumn: Int) {
+    if (viewColumn !in 0 until table.columnCount || table.columnCount < 2) return
+    val column = table.columnModel.getColumn(viewColumn)
+    table.columnModel.removeColumn(column)
+    pinnedTable().columnModel.addColumn(column)
+    pinnedChanged()
+  }
+
+  /** Moves a pinned column back to the start of the grid. */
+  internal fun unpin(pinnedColumn: Int) {
+    val pinned = table.frozen ?: return
+    if (pinnedColumn !in 0 until pinned.columnCount) return
+    val column = pinned.columnModel.getColumn(pinnedColumn)
+    pinned.columnModel.removeColumn(column)
+    table.columnModel.addColumn(column)
+    table.columnModel.moveColumn(table.columnCount - 1, 0)
+    if (pinned.columnCount == 0) {
+      rowHeaderPanel.remove(pinned)
+      corner.remove(pinned.tableHeader)
       table.frozen = null
       table.frozenIsCurrent = false
-      table.columnModel.addColumn(column)
-      table.columnModel.moveColumn(table.columnCount - 1, 0)
     }
+    pinnedChanged()
+  }
+
+  internal fun unpinAll() {
+    while (table.frozen != null) unpin(table.frozen!!.columnCount - 1)
+  }
+
+  private fun pinnedChanged() {
+    table.frozen?.let { it.preferredScrollableViewportSize = java.awt.Dimension(it.columnModel.totalColumnWidth, 0) }
     refresh()
     scroll.revalidate()
     scroll.repaint()
+  }
+
+  private fun pinnedTable(): JTable = table.frozen ?: JBTable(table.model, DefaultTableColumnModel()).apply {
+    autoCreateColumnsFromModel = false
+    rowSorter = table.rowSorter
+    selectionModel = table.selectionModel
+    setCellSelectionEnabled(true)
+    font = table.font
+    rowHeight = table.rowHeight
+    setShowGrid(true)
+    gridColor = JBColor.border()
+    background = gridBackground()
+    autoResizeMode = JTable.AUTO_RESIZE_OFF
+    tableHeader.defaultRenderer = table.headerRenderer
+    tableHeader.reorderingAllowed = false
+    setDefaultRenderer(Any::class.java, table.cellRenderer)
+    border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 0, 1)
+    addMouseListener(object : MouseAdapter() {
+      override fun mousePressed(e: MouseEvent) {
+        table.frozenIsCurrent = true
+        table.columnModel.selectionModel.clearSelection()
+        selectionChanged()
+      }
+    })
+    val pinned = this
+    PopupHandler.installPopupMenu(tableHeader, DefaultActionGroup(
+      action("Unpin Column", { pinned.columnModel.selectionModel.leadSelectionIndex in 0 until pinned.columnCount }) {
+        unpin(pinned.columnModel.selectionModel.leadSelectionIndex)
+      },
+    ), "DynoTableResultsPinnedHeader")
+    tableHeader.addMouseListener(object : MouseAdapter() {
+      override fun mousePressed(e: MouseEvent) {
+        val column = pinned.columnAtPoint(e.point).takeIf { it >= 0 } ?: return
+        pinned.columnModel.selectionModel.setSelectionInterval(column, column)
+      }
+    })
+    table.frozen = this
+    rowHeaderPanel.add(this, BorderLayout.CENTER)
+    corner.add(tableHeader, BorderLayout.CENTER)
   }
 
   /** The value list of a column filter: a search field, Select All, one box per value, Apply and Clear. */
@@ -719,18 +742,7 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
     })
     add(action("Select Column", { leadColumn() >= 0 }) { table.selectColumn(leadColumn()) })
     addSeparator()
-    add(object : DumbAwareToggleAction("Freeze First Column") {
-      override fun getActionUpdateThread() = ActionUpdateThread.EDT
-
-      override fun update(e: AnActionEvent) {
-        super.update(e)
-        e.presentation.isEnabled = table.frozen != null || table.columnCount > 1
-      }
-
-      override fun isSelected(e: AnActionEvent) = table.frozen != null
-
-      override fun setSelected(e: AnActionEvent, state: Boolean) = freeze(state)
-    })
+    add(action("Pin Column", { leadColumn() >= 0 && table.columnCount > 1 }) { pin(leadColumn()) })
     addSeparator()
     addAll(columnActions())
     add(action("Reset Columns Width", { table.columnCount > 0 }) { table.fitColumns() })

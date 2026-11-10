@@ -200,11 +200,12 @@ class ResultsModelTest {
     assertEquals("{not json", viewerText(resultView(one("{not json")), 0, 0))
   }
 
-  // Cmd+C pastes into a spreadsheet as TSV: a tab must not split the field, a comma must not quote it.
+  // Cmd+C pastes as TSV: a tab must not split the field, a comma must not quote it, and the value
+  // stays as the IDE's data grids copy it, with no formula guard.
   @Test
-  fun `TSV quotes a field with a tab, leaves a comma alone, and guards a formula`() {
+  fun `TSV quotes a field with a tab, leaves a comma alone, and keeps a formula as it is`() {
     val shown = resultView(result("columns" to listOf("a", "b", "c"), "rows" to listOf(mapOf("a" to "x\ty", "b" to "1,2", "c" to "=x"))))
-    assertEquals("\"x\ty\"\t1,2\t'=x", selectionTsv(shown, Selection(listOf(0), listOf(0, 1, 2)), header = false))
+    assertEquals("\"x\ty\"\t1,2\t=x", selectionTsv(shown, Selection(listOf(0), listOf(0, 1, 2)), header = false))
   }
 
   // Copy Column is plain text: a guard would change the values the user copies.

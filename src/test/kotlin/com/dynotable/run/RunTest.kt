@@ -308,8 +308,16 @@ class RunTest {
       val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
       ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
     }
-    // Cmd+C copies TSV, with the same guard and quoting as CSV.
-    assertEquals("'=1+1\t\"{\"\"qty\"\":1}\"", clipboard())
+    // Cmd+C copies like the IDE's data grids: TSV quoted as CSV, but with no formula guard.
+    assertEquals("=1+1\t\"{\"\"qty\"\":1}\"", clipboard())
+    // One cell copies its value as it is.
+    withContext(Dispatchers.EDT) {
+      panel.table.changeSelection(0, 1, false, false)
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { panel.table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
+    assertEquals("{\"qty\":1}", clipboard())
   }
 
   // Sort, filters, a frozen column and hidden columns all go through the view-to-model mapping; a copy
@@ -347,15 +355,15 @@ class RunTest {
       assertEquals(listOf("9", ""), column0())
       assertEquals("2 of 4 rows shown", panel.grid.shownNote.text)
       table.setColumnFilter(1, null)
-      // The frozen column leaves the main grid but still comes first in a copy.
-      panel.grid.freeze(true)
+      // A pinned column leaves the main grid but still comes first in a copy.
+      panel.grid.pin(0)
       assertEquals(1, table.columnCount)
       table.selectRows(0, 1)
       copy()
     }
     assertEquals("100\thundred\r\n10\tten", clipboard())
     withContext(Dispatchers.EDT) {
-      panel.grid.freeze(false)
+      panel.grid.unpinAll()
       assertEquals(listOf("n", "v"), (0 until table.columnCount).map(table::getColumnName))
       table.columnModel.removeColumn(table.columnModel.getColumn(1))
       table.setRowSelectionInterval(0, 1)

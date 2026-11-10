@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- DynoTable Results is a data grid:
+  - Numbers align right. `null` and nested values are dimmed, and a nested value shows in full in
+    its tooltip.
+  - Rows are striped and numbered. Columns fit their content, and you can resize and move them.
+  - Click a column header to sort. Numbers sort by value.
+  - Type in the grid to find a cell. The filter field hides the rows that do not contain its text.
+  - Double-click a cell, or press Shift+Enter, to see its full value. JSON shows formatted, with
+    Copy.
+  - The context menu has Copy Value, Copy Selection as CSV, JSON or Markdown, Copy Column, Record
+    View, Hide Column and Show All Columns. Cmd+C (Ctrl+C) copies only the columns that show.
+- DynoTable Results has a toolbar: Cancel Run, and a Copy All Rows menu (CSV or JSON). It no longer
+  shows the statement text above the rows.
+
 ## 0.1.0
 
 First release. Needs a JetBrains IDE 2026.3 or later and DynoTable 1.19.0 or later.

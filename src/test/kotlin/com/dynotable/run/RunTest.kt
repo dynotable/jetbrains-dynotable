@@ -163,6 +163,14 @@ class RunTest {
     window.contentManager.contents.single().component as ResultsPanel
   }
 
+  /** Runs a toolbar [action] as a click does: update first, then perform when it is enabled. */
+  private fun perform(action: AnAction) {
+    val event = TestActionEvent.createTestEvent(action, CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) {})
+    ActionUtil.updateAction(action, event)
+    assertTrue(event.presentation.isEnabled, "${action.templateText} is disabled")
+    ActionUtil.performAction(action, event)
+  }
+
   private suspend fun clipboard(): String = withContext(Dispatchers.EDT) { CopyPasteManager.getInstance().getContents<String>(DataFlavor.stringFlavor)!! }
 
   /** A result whose answer is [rows] under [columns], with [statement]. */
@@ -244,7 +252,7 @@ class RunTest {
 
   // A JLabel renders a text that starts with <html> as HTML, which can load an image from anywhere.
   @Test
-  fun `an integer cell shows 1, and a hostile column, cell and statement show as text`() = integrationTest {
+  fun `an integer cell shows 1, and a hostile column and cell show as text`() = integrationTest {
     val hostile = """<html><img src="https://example.com/x.png">"""
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", hostile), listOf(mapOf("n" to 1, hostile to hostile)), hostile) }
     start()
@@ -260,20 +268,17 @@ class RunTest {
         assertEquals(hostile, label.text)
         assertNull(label.getClientProperty(BasicHTML.propertyKey), "an HTML view")
       }
-      // A text area never reads HTML.
-      assertEquals(hostile, panel.statement.text)
     }
   }
 
   @Test
-  fun `an empty result shows its statement and No rows, with no table`() = integrationTest {
+  fun `an empty result shows No rows, with no table`() = integrationTest {
     h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(emptyList(), emptyList(), "SELECT * FROM \"empty\"") }
     start()
     val panel = panel()
     runIn(open("empty.dynotable.sql"))
     waitFor("the result view") { panel.shown is View.Result }
     withContext(Dispatchers.EDT) {
-      assertEquals("SELECT * FROM \"empty\"", panel.statement.text)
       assertTrue(SwingUtilities.isDescendingFrom(panel.noRows, panel))
       assertFalse(SwingUtilities.isDescendingFrom(panel.table, panel))
     }
@@ -287,9 +292,9 @@ class RunTest {
     val panel = panel()
     runIn(open("copy.dynotable.sql"))
     waitFor("the result view") { panel.shown is View.Result }
-    withContext(Dispatchers.EDT) { panel.copyCsv.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.copyCsv) }
     assertEquals("v,n\r\n'=1+1,\"{\"\"qty\"\":1}\"", clipboard())
-    withContext(Dispatchers.EDT) { panel.copyJson.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.copyJson) }
     assertEquals("[\n  {\n    \"v\": \"=1+1\",\n    \"n\": {\n      \"qty\": 1\n    }\n  }\n]", clipboard())
     withContext(Dispatchers.EDT) {
       panel.table.setRowSelectionInterval(0, 0)
@@ -301,13 +306,39 @@ class RunTest {
     assertEquals("'=1+1,\"{\"\"qty\"\":1}\"", clipboard())
   }
 
+  // Sort, filter and hidden columns all go through the view-to-model mapping; a copy that reads model
+  // order, or every column, copies rows the user does not see.
+  @Test
+  fun `numbers sort by value, the filter hides rows, and Cmd+C copies only the shown cells`() = integrationTest {
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", "v"), listOf(mapOf("n" to 10, "v" to "ten"), mapOf("n" to 9, "v" to "nine"), mapOf("n" to 100, "v" to "hundred"))) }
+    start()
+    val panel = panel()
+    runIn(open("grid.dynotable.sql"))
+    waitFor("the result view") { panel.shown is View.Result }
+    withContext(Dispatchers.EDT) {
+      val table = panel.table
+      table.rowSorter.toggleSortOrder(0)
+      assertEquals(listOf("9", "10", "100"), (0 until table.rowCount).map { table.getValueAt(it, 0) })
+      panel.grid.filterField.text = "TEN"
+      assertEquals(1, table.rowCount)
+      assertEquals("1 of 3 rows shown", panel.grid.shownNote.text)
+      panel.grid.filterField.text = ""
+      table.columnModel.removeColumn(table.columnModel.getColumn(1))
+      table.setRowSelectionInterval(0, 1)
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
+    assertEquals("9\r\n10", clipboard())
+  }
+
   @Test
   fun `Cancel sends a cancel for the run, shows the cancelled view and no notification`() = integrationTest {
     start()
     val panel = panel()
     val job = heldRun(open("cancel.partiql", "SELECT * FROM \"orders\""))
     waitFor("the running view drawn") { panel.shown is View.Running }
-    withContext(Dispatchers.EDT) { panel.cancel.doClick() }
+    withContext(Dispatchers.EDT) { perform(panel.cancel) }
     job.join()
     waitFor("the cancel") { cancels().size == 1 }
     assertEquals(View.Cancelled, results.view)

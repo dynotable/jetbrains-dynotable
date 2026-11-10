@@ -89,9 +89,16 @@ All actions are in **Tools › DynoTable** and in **Find Action**.
   statement at the caret, or else the whole file. An OpenSearch query runs the selection or the
   whole file.
 - **Results.** The **DynoTable Results** tool window shows the rows of the last run. It shows the
-  total only when DynoTable knows it. A run returns up to 500 rows. **Copy CSV** and **Copy JSON**
-  copy the rows. **Cancel** stops the run. Closing the results tab also stops it. You can run one
+  total only when DynoTable knows it. A run returns up to 500 rows. The **Copy All Rows** menu in its
+  toolbar copies the rows as CSV or JSON. **Cancel Run** (the stop icon) stops the run. Closing the results tab also stops it. You can run one
   statement at a time.
+  - Click a column header to sort. Drag a column header to move the column.
+  - Type in the grid to find a cell. The **Filter rows** field hides the rows that do not contain
+    its text.
+  - Double-click a cell, or press Shift+Enter, to see its full value.
+  - Right-click for **Copy Value**, **Copy Selection as CSV**, **JSON** or **Markdown**, **Copy
+    Column**, **Record View** (one row as a list of columns and values), **Hide Column** and
+    **Show All Columns**.
 - **Open in DynoTable.** Click the **Open in DynoTable** lens, or press Cmd+Shift+Enter
   (Ctrl+Shift+Enter) with the caret in the statement. SQL and PartiQL only.
 - **Shortcuts.** In DynoTable files, Cmd+Enter and Cmd+Shift+Enter run the DynoTable actions before

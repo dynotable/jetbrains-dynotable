@@ -4,16 +4,21 @@ import com.dynotable.protocol.RunResult
 import com.dynotable.protocol.jsNumber
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
 
-/** The rows of a result as the tool window shows them: one text per column, per row. */
+/** The rows of a result as the tool window shows them: one text and one kind per column, per row. */
 data class ResultView(
   val summary: String,
   val columns: List<String>,
   val cells: List<List<String>>,
-  val executedStatement: String,
+  val kinds: List<List<CellKind>>,
+  val values: List<JsonObject>,
 )
+
+/** How a cell draws and sorts. A tagged value such as `{"N": …}` is a [STRUCTURE]: its text is JSON. */
+enum class CellKind { TEXT, NUMBER, BOOLEAN, NULL, MISSING, STRUCTURE }
 
 sealed interface View {
   data object Empty : View
@@ -49,12 +54,63 @@ fun cellText(row: JsonObject, column: String): String {
   return if (value is JsonPrimitive && value.isString) value.asString else json(value)
 }
 
+fun cellKind(row: JsonObject, column: String): CellKind = when (val value = row.get(column)) {
+  null -> CellKind.MISSING
+  is JsonNull -> CellKind.NULL
+  is JsonPrimitive -> when {
+    value.isNumber -> CellKind.NUMBER
+    value.isBoolean -> CellKind.BOOLEAN
+    else -> CellKind.TEXT
+  }
+  else -> CellKind.STRUCTURE
+}
+
 fun resultView(result: RunResult) = ResultView(
   summary = summary(result),
   columns = result.columns,
   cells = result.rows.map { row -> result.columns.map { cellText(row, it) } },
-  executedStatement = result.executedStatement,
+  kinds = result.rows.map { row -> result.columns.map { cellKind(row, it) } },
+  values = result.rows,
 )
+
+/** Numbers by value, not by text: `9` before `10`. An empty (missing) cell goes last. */
+fun compareNumberTexts(a: String, b: String): Int = when {
+  a.isEmpty() || b.isEmpty() -> b.length.coerceAtMost(1) - a.length.coerceAtMost(1)
+  else -> a.toBigDecimal().compareTo(b.toBigDecimal())
+}
+
+/** A cell matches a filter when its text holds [filter], in any case. A blank filter matches all. */
+fun matchesFilter(cells: List<String>, filter: String): Boolean =
+  filter.isBlank() || cells.any { it.contains(filter.trim(), ignoreCase = true) }
+
+/** The [rows] × [columns] (model indices, in view order) of [view]. */
+data class Selection(val rows: List<Int>, val columns: List<Int>)
+
+fun selectionCsv(view: ResultView, selection: Selection, header: Boolean): String =
+  csv((if (header) listOf(selection.columns.map { view.columns[it] }) else emptyList()) + selection.rows.map { r -> selection.columns.map { view.cells[r][it] } })
+
+/** One object per row, with the selected keys in view order. A row that lacks a key leaves it out. */
+fun selectionJson(view: ResultView, selection: Selection): String = json(
+  JsonArray().apply {
+    selection.rows.forEach { r ->
+      add(JsonObject().apply { selection.columns.map { view.columns[it] }.forEach { key -> view.values[r].get(key)?.let { add(key, it) } } })
+    }
+  },
+  "  ",
+)
+
+/** A GitHub table: a `|` in a cell is escaped, and a line break becomes a space. */
+fun selectionMarkdown(view: ResultView, selection: Selection): String {
+  fun line(cells: List<String>) = cells.joinToString(" | ", "| ", " |") { it.replace("|", "\\|").replace(Regex("\r\n|\r|\n"), " ") }
+  return (listOf(line(selection.columns.map { view.columns[it] }), line(selection.columns.map { "---" })) + selection.rows.map { r -> line(selection.columns.map { view.cells[r][it] }) })
+    .joinToString("\n")
+}
+
+/** What the value viewer shows: a string as it is, any other value as indented JSON. */
+fun viewerText(view: ResultView, row: Int, column: Int): String {
+  val value = view.values[row].get(view.columns[column]) ?: return ""
+  return if (value is JsonPrimitive && value.isString) value.asString else json(value, "  ")
+}
 
 private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][+-]?\d+)?""")
 private const val FORMULA_START = "=+-@\t\r\n"

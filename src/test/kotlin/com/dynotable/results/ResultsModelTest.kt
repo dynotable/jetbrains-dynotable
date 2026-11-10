@@ -2,6 +2,8 @@ package com.dynotable.results
 
 import com.dynotable.protocol.RunResult
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -131,6 +133,65 @@ class ResultsModelTest {
   @ValueSource(strings = ["-12345678901.5", "-1e5"])
   fun `CSV leaves a number literal intact`(cell: String) {
     assertEquals("v\r\n$cell", toCsv(one(cell)))
+  }
+
+  // A tagged exact decimal is JSON text, not a number: sorting it as a number would throw.
+  @Test
+  fun `each value shape has its kind`() {
+    val shown = resultView(
+      result(
+        "columns" to listOf("s", "n", "b", "z", "exact", "list", "absent"),
+        "rows" to listOf(mapOf("s" to "1", "n" to 1.0, "b" to true, "z" to null, "exact" to mapOf("N" to "1.5"), "list" to listOf(1.0))),
+      ),
+    )
+    assertEquals(
+      listOf(listOf(CellKind.TEXT, CellKind.NUMBER, CellKind.BOOLEAN, CellKind.NULL, CellKind.STRUCTURE, CellKind.STRUCTURE, CellKind.MISSING)),
+      shown.kinds,
+    )
+  }
+
+  // As text, "10" sorts before "9".
+  @Test
+  fun `numbers compare by value, and an empty cell sorts last`() {
+    assertEquals(listOf("-1", "0.5", "9", "10", "1e+21", ""), listOf("", "10", "1e+21", "9", "0.5", "-1").sortedWith(::compareNumberTexts))
+  }
+
+  @Test
+  fun `the filter ignores case and a blank filter keeps every row`() {
+    assertTrue(matchesFilter(listOf("PENDING", "Shipped"), "SHIP"))
+    assertFalse(matchesFilter(listOf("PENDING"), "ship"))
+    assertTrue(matchesFilter(listOf("x"), "  "))
+  }
+
+  private val two = resultView(
+    result(
+      "columns" to listOf("a", "b", "c"),
+      "rows" to listOf(mapOf("a" to "a|1", "b" to "line\nbreak", "c" to 1.0), mapOf("a" to "a2", "c" to 2.0)),
+    ),
+  )
+
+  // The user reordered columns and sorted rows: a copy in model order pastes what they did not see.
+  @Test
+  fun `a selection copies its rows and columns in view order`() {
+    assertEquals("c,a\r\n2,a2\r\n1,a|1", selectionCsv(two, Selection(listOf(1, 0), listOf(2, 0)), header = true))
+  }
+
+  @Test
+  fun `a selection as JSON keeps the raw values and leaves out a key the row lacks`() {
+    assertEquals("[\n  {\n    \"c\": 2\n  }\n]", selectionJson(two, Selection(listOf(1), listOf(2, 1))))
+  }
+
+  // An unescaped `|` adds a column, and a line break ends the table.
+  @Test
+  fun `a selection as Markdown escapes the pipe and folds line breaks`() {
+    assertEquals("| a | b |\n| --- | --- |\n| a\\|1 | line break |", selectionMarkdown(two, Selection(listOf(0), listOf(0, 1))))
+  }
+
+  @Test
+  fun `the value viewer shows a string as it is and a structure as indented JSON`() {
+    val shown = resultView(one(mapOf("k" to listOf(1.0))))
+    assertEquals("{\n  \"k\": [\n    1\n  ]\n}", viewerText(shown, 0, 0))
+    assertEquals("{\"x\":1}", viewerText(resultView(one("{\"x\":1}")), 0, 0))
   }
 
   companion object {

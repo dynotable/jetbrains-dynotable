@@ -2,6 +2,9 @@ package com.dynotable.results
 
 import com.dynotable.protocol.RunResult
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.Arguments
@@ -131,6 +134,101 @@ class ResultsModelTest {
   @ValueSource(strings = ["-12345678901.5", "-1e5"])
   fun `CSV leaves a number literal intact`(cell: String) {
     assertEquals("v\r\n$cell", toCsv(one(cell)))
+  }
+
+  // A tagged exact decimal is JSON text, not a number: sorting it as a number would throw.
+  @Test
+  fun `each value shape has its kind`() {
+    val shown = resultView(
+      result(
+        "columns" to listOf("s", "n", "b", "z", "exact", "list", "absent"),
+        "rows" to listOf(mapOf("s" to "1", "n" to 1.0, "b" to true, "z" to null, "exact" to mapOf("N" to "1.5"), "list" to listOf(1.0))),
+      ),
+    )
+    assertEquals(
+      listOf(listOf(CellKind.TEXT, CellKind.NUMBER, CellKind.BOOLEAN, CellKind.NULL, CellKind.STRUCTURE, CellKind.STRUCTURE, CellKind.MISSING)),
+      shown.kinds,
+    )
+  }
+
+  // As text, "10" sorts before "9".
+  @Test
+  fun `numbers compare by value, and a column with only numbers and empty cells is numeric`() {
+    assertEquals(listOf("-1", "0.5", "9", "10", "1e+21"), listOf("10", "1e+21", "9", "0.5", "-1").sortedWith { x, y -> compareCellTexts(x, y, numeric = true) })
+    // A null among the numbers does not make the column text.
+    assertTrue(isNumericColumn(listOf(CellKind.NUMBER, CellKind.NULL, CellKind.MISSING)))
+    assertFalse(isNumericColumn(listOf(CellKind.NUMBER, CellKind.TEXT)))
+  }
+
+  @Test
+  fun `the filter ignores case and a blank filter keeps every row`() {
+    assertTrue(matchesFilter(listOf("PENDING", "Shipped"), "SHIP"))
+    assertFalse(matchesFilter(listOf("PENDING"), "ship"))
+    assertTrue(matchesFilter(listOf("x"), "  "))
+  }
+
+  private val two = resultView(
+    result(
+      "columns" to listOf("a", "b", "c"),
+      "rows" to listOf(mapOf("a" to "a|1", "b" to "line\nbreak", "c" to 1.0), mapOf("a" to "a2", "c" to 2.0)),
+    ),
+  )
+
+  // The user reordered columns and sorted rows: a copy in model order pastes what they did not see.
+  @Test
+  fun `a selection copies its rows and columns in view order`() {
+    assertEquals("c,a\r\n2,a2\r\n1,a|1", selectionCsv(two, Selection(listOf(1, 0), listOf(2, 0)), header = true))
+  }
+
+  @Test
+  fun `a selection as JSON keeps the raw values and leaves out a key the row lacks`() {
+    assertEquals("[\n  {\n    \"c\": 2\n  }\n]", selectionJson(two, Selection(listOf(1), listOf(2, 1))))
+  }
+
+  // An unescaped `|` adds a column, and a line break ends the table.
+  @Test
+  fun `a selection as Markdown escapes the pipe and folds line breaks`() {
+    assertEquals("| a | b |\n| --- | --- |\n| a\\|1 | line break |", selectionMarkdown(two, Selection(listOf(0), listOf(0, 1))))
+  }
+
+  @Test
+  fun `the value viewer shows a string as it is and a structure as indented JSON`() {
+    val shown = resultView(one(mapOf("k" to listOf(1.0))))
+    assertEquals("{\n  \"k\": [\n    1\n  ]\n}", viewerText(shown, 0, 0))
+    // A string that holds a JSON object shows formatted too; any other string as it is.
+    assertEquals("{\n  \"x\": 1\n}", viewerText(resultView(one("{\"x\":1}")), 0, 0))
+    assertEquals("{not json", viewerText(resultView(one("{not json")), 0, 0))
+  }
+
+  // Cmd+C pastes as TSV: a tab must not split the field, a comma must not quote it, and the value
+  // stays as the IDE's data grids copy it, with no formula guard.
+  @Test
+  fun `TSV quotes a field with a tab, leaves a comma alone, and keeps a formula as it is`() {
+    val shown = resultView(result("columns" to listOf("a", "b", "c"), "rows" to listOf(mapOf("a" to "x\ty", "b" to "1,2", "c" to "=x"))))
+    assertEquals("\"x\ty\"\t1,2\t=x", selectionTsv(shown, Selection(listOf(0), listOf(0, 1, 2)), header = false))
+  }
+
+  // Copy Column is plain text: a guard would change the values the user copies.
+  @Test
+  fun `Copy Column joins the values by a line break with no guard and no header`() {
+    val shown = resultView(result("columns" to listOf("v"), "rows" to listOf(mapOf("v" to "=x"), mapOf("v" to "a,b"))))
+    assertEquals("=x\na,b", columnText(shown, listOf(0, 1), 0))
+  }
+
+  // A tagged exact number is JSON text: summing it as a double would round it.
+  @Test
+  fun `totals count the cells with a value and sum only the numbers`() {
+    val cells = listOf("10" to CellKind.NUMBER, "20" to CellKind.NUMBER, "x" to CellKind.TEXT, "" to CellKind.MISSING, "{\"N\":\"1.5\"}" to CellKind.STRUCTURE)
+    assertEquals("Count 4 · Sum 30 · Avg 15 · Min 10 · Max 20", totals(cells))
+    assertNull(totals(listOf("a" to CellKind.TEXT, "b" to CellKind.TEXT)))
+    assertNull(totals(listOf("1" to CellKind.NUMBER)))
+  }
+
+  @Test
+  fun `the column filter lists (empty) once for missing and null, and keeps both with it`() {
+    val shown = resultView(result("columns" to listOf("v"), "rows" to listOf(mapOf("v" to "b"), mapOf("v" to null), emptyMap<String, Any?>(), mapOf("v" to "a"), mapOf("v" to "b"))))
+    assertEquals(listOf(null, "a", "b"), distinctValues(shown, 0))
+    assertEquals(listOf(false, true, true, false, false), (0..4).map { matchesColumnFilters(shown, it, mapOf(0 to setOf<String?>(null))) })
   }
 
   companion object {

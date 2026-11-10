@@ -55,6 +55,7 @@ import com.intellij.testFramework.junit5.fixture.moduleFixture
 import com.intellij.testFramework.junit5.fixture.projectFixture
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
+import com.intellij.util.ui.UIUtil
 import com.jetbrains.rd.util.lifetime.LifetimeDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -85,6 +86,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JLabel
+import javax.swing.JComponent
 import javax.swing.KeyStroke
 import javax.swing.SwingUtilities
 import javax.swing.plaf.basic.BasicHTML
@@ -262,7 +264,8 @@ class RunTest {
     withContext(Dispatchers.EDT) {
       val table = panel.table
       assertEquals("1", (table.prepareRenderer(table.getCellRenderer(0, 0), 0, 0) as JLabel).text)
-      val header = table.tableHeader.defaultRenderer.getTableCellRendererComponent(table, table.getColumnName(1), false, false, -1, 1) as JLabel
+      val headerCell = table.tableHeader.defaultRenderer.getTableCellRendererComponent(table, table.getColumnName(1), false, false, -1, 1) as JComponent
+      val header = UIUtil.findComponentsOfType(headerCell, JLabel::class.java).first { it.text.isNotEmpty() }
       val cell = table.prepareRenderer(table.getCellRenderer(0, 1), 0, 1) as JLabel
       for (label in listOf(header, cell)) {
         assertEquals(hostile, label.text)
@@ -319,10 +322,11 @@ class RunTest {
       val table = panel.table
       table.rowSorter.toggleSortOrder(0)
       assertEquals(listOf("9", "10", "100"), (0 until table.rowCount).map { table.getValueAt(it, 0) })
-      panel.grid.filterField.text = "TEN"
+      panel.grid.find.filterRows.isSelected = true
+      panel.grid.find.field.text = "TEN"
       assertEquals(1, table.rowCount)
       assertEquals("1 of 3 rows shown", panel.grid.shownNote.text)
-      panel.grid.filterField.text = ""
+      panel.grid.find.field.text = ""
       table.columnModel.removeColumn(table.columnModel.getColumn(1))
       table.setRowSelectionInterval(0, 1)
       val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
@@ -330,6 +334,23 @@ class RunTest {
       ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
     }
     assertEquals("9\r\n10", clipboard())
+    // One cell copies its value as it is, with no CSV quoting or guard.
+    withContext(Dispatchers.EDT) {
+      val table = panel.table
+      table.changeSelection(0, 0, false, false)
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
+    assertEquals("9", clipboard())
+    // A click selects one cell, as in the IDE's data grids, not the whole row.
+    withContext(Dispatchers.EDT) {
+      val table = panel.table
+      table.createDefaultColumnsFromModel()
+      table.changeSelection(1, 0, false, false)
+      assertTrue(table.isCellSelected(1, 0))
+      assertFalse(table.isCellSelected(1, 1), "the click selected the whole row")
+    }
   }
 
   @Test

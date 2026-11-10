@@ -9,6 +9,7 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -205,7 +206,7 @@ class ResultsPanel(project: Project) : SimpleToolWindowPanel(true, true), Dispos
       add(copyCsv)
       add(copyJson)
     }
-    val actions = ActionManager.getInstance().createActionToolbar("DynoTableResults", DefaultActionGroup(cancel, copyAll), true)
+    val actions = ActionManager.getInstance().createActionToolbar("DynoTableResults", DefaultActionGroup(cancel, copyAll, Separator.getInstance(), grid.showFind, grid.showRecord, grid.openValue), true)
     actions.targetComponent = this
     toolbar = JPanel(BorderLayout()).apply {
       border = JBUI.Borders.customLineBottom(JBColor.border())

@@ -2,18 +2,19 @@
 
 ## Unreleased
 
-- DynoTable Results is a data grid:
-  - Numbers align right. `null` and nested values are dimmed, and a nested value shows in full in
-    its tooltip.
-  - Rows are striped and numbered. Columns fit their content, and you can resize and move them.
-  - Click a column header to sort. Numbers sort by value.
-  - Type in the grid to find a cell. The filter field hides the rows that do not contain its text.
-  - Double-click a cell, or press Shift+Enter, to see its full value. JSON shows formatted, with
-    Copy.
-  - The context menu has Copy Value, Copy Selection as CSV, JSON or Markdown, Copy Column, Record
-    View, Hide Column and Show All Columns. Cmd+C (Ctrl+C) copies only the columns that show.
-- DynoTable Results has a toolbar: Cancel Run, and a Copy All Rows menu (CSV or JSON). It no longer
-  shows the statement text above the rows.
+- DynoTable Results is a data grid that looks and works like the IDE's own data grids:
+  - Cells use the editor font. Numbers align right, and `null` shows as `<null>`. Columns fit their
+    content, and you can resize and move them. Rows are numbered.
+  - Select a cell, a block of cells, rows (click the row numbers) or a column (click its name). Cmd+C
+    (Ctrl+C) copies one cell as its value, and more cells as CSV.
+  - Click the sort icon in a column header to sort. Numbers sort by value.
+  - Find (Cmd+F) highlights the matching cells and moves between them. Its Filter rows option hides
+    the rows without a match.
+  - A side panel shows the full value of a cell (Open in Value Editor, Shift+Enter or a double-click)
+    or the row as columns and values (Show Record View, Shift+Cmd+Enter). JSON shows formatted.
+  - The context menu has Copy As CSV, JSON or Markdown, Hide Column and Show All Columns.
+- DynoTable Results has a toolbar: Cancel Run, a Copy All Rows menu (CSV or JSON), Find, Show
+  Record View and Open in Value Editor. It no longer shows the statement text above the rows.
 
 ## 0.1.0
 

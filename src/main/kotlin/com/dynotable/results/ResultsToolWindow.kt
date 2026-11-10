@@ -15,6 +15,9 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
+import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
@@ -176,7 +179,7 @@ private fun addResultsContent(project: Project, window: ToolWindow) {
 }
 
 /** Shows the [Results] view. Every server string shows as plain text, never as Swing HTML. */
-class ResultsPanel(project: Project) : SimpleToolWindowPanel(true, true), Disposable {
+class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, true), Disposable {
   private val results = Results.getInstance(project)
   internal val summary = plainLabel().apply { foreground = NamedColorUtil.getInactiveTextColor() }
   internal val grid = ResultsGrid(project, this)
@@ -194,6 +197,7 @@ class ResultsPanel(project: Project) : SimpleToolWindowPanel(true, true), Dispos
   internal val copyJson = toolbarAction("Copy All Rows as JSON", null, { shown is View.Result }) {
     (shown as? View.Result)?.let { results.copy(it.run, asJson = true) }
   }
+  private val export = toolbarAction("Export…", AllIcons.ToolbarDecorator.Export, { shown is View.Result }) { chooseExportFormat() }
 
   /** The view drawn last. */
   @Volatile
@@ -206,7 +210,7 @@ class ResultsPanel(project: Project) : SimpleToolWindowPanel(true, true), Dispos
       add(copyCsv)
       add(copyJson)
     }
-    val actions = ActionManager.getInstance().createActionToolbar("DynoTableResults", DefaultActionGroup(cancel, copyAll, Separator.getInstance(), grid.showFind, grid.showRecord, grid.openValue), true)
+    val actions = ActionManager.getInstance().createActionToolbar("DynoTableResults", DefaultActionGroup(cancel, copyAll, export, Separator.getInstance(), grid.showFind, grid.showRecord, grid.openValue), true)
     actions.targetComponent = this
     toolbar = JPanel(BorderLayout()).apply {
       border = JBUI.Borders.customLineBottom(JBColor.border())
@@ -238,6 +242,35 @@ class ResultsPanel(project: Project) : SimpleToolWindowPanel(true, true), Dispos
     }
     body.revalidate()
     body.repaint()
+  }
+
+  private fun chooseExportFormat() {
+    val result = shown as? View.Result ?: return
+    JBPopupFactory.getInstance().createPopupChooserBuilder(listOf("CSV", "JSON", "Markdown"))
+      .setTitle("Export Format")
+      .setItemChosenCallback { format -> export(result, format) }
+      .createPopup()
+      .showInCenterOf(this)
+  }
+
+  /** Writes all rows and all columns, as Copy All Rows does, to a file the user picks. */
+  private fun export(result: View.Result, format: String) {
+    val extension = when (format) {
+      "CSV" -> "csv"
+      "JSON" -> "json"
+      else -> "md"
+    }
+    val text = when (format) {
+      "CSV" -> toCsv(result.run)
+      "JSON" -> toJson(result.run)
+      else -> result.shown.let { selectionMarkdown(it, Selection(it.cells.indices.toList(), it.columns.indices.toList())) }
+    }
+    val target = FileChooserFactory.getInstance()
+      .createSaveFileDialog(FileSaverDescriptor("Export Results", "", extension), project)
+      .save("dynotable-results.$extension") ?: return
+    target.file.writeText(text)
+    val rows = result.shown.cells.size
+    StatusBar.Info.set("Saved $rows ${if (rows == 1) "row" else "rows"} to ${target.file.name}.", project)
   }
 
   private fun toolbarAction(text: String, icon: Icon?, enabled: () -> Boolean, run: () -> Unit) = object : DumbAwareAction(text, null, icon) {

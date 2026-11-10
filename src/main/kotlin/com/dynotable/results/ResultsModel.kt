@@ -73,11 +73,15 @@ fun resultView(result: RunResult) = ResultView(
   values = result.rows,
 )
 
-/** Numbers by value, not by text: `9` before `10`. An empty (missing) cell goes last. */
-fun compareNumberTexts(a: String, b: String): Int = when {
-  a.isEmpty() || b.isEmpty() -> b.length.coerceAtMost(1) - a.length.coerceAtMost(1)
-  else -> a.toBigDecimal().compareTo(b.toBigDecimal())
-}
+/** A missing value or `null`: it sorts last, counts as no value in the totals, and filters as `(empty)`. */
+fun CellKind.isEmpty() = this == CellKind.MISSING || this == CellKind.NULL
+
+/** A column sorts by number when every cell that has a value is a number. */
+fun isNumericColumn(kinds: List<CellKind>): Boolean = kinds.filterNot { it.isEmpty() }.let { it.isNotEmpty() && it.all { k -> k == CellKind.NUMBER } }
+
+/** Two non-empty cells: by value in a numeric column (`9` before `10`), else by text, in any case. */
+fun compareCellTexts(a: String, b: String, numeric: Boolean): Int =
+  if (numeric) a.toBigDecimal().compareTo(b.toBigDecimal()) else a.compareTo(b, ignoreCase = true)
 
 /** A cell matches a filter when its text holds [filter], in any case. A blank filter matches all. */
 fun matchesFilter(cells: List<String>, filter: String): Boolean =
@@ -86,8 +90,47 @@ fun matchesFilter(cells: List<String>, filter: String): Boolean =
 /** The [rows] × [columns] (model indices, in view order) of [view]. */
 data class Selection(val rows: List<Int>, val columns: List<Int>)
 
-fun selectionCsv(view: ResultView, selection: Selection, header: Boolean): String =
-  csv((if (header) listOf(selection.columns.map { view.columns[it] }) else emptyList()) + selection.rows.map { r -> selection.columns.map { view.cells[r][it] } })
+fun selectionCsv(view: ResultView, selection: Selection, header: Boolean): String = delimited(view, selection, header, ',')
+
+/** What Cmd/Ctrl+C copies: tab-separated, with the same formula guard and quoting as CSV. */
+fun selectionTsv(view: ResultView, selection: Selection, header: Boolean): String = delimited(view, selection, header, '\t')
+
+private fun delimited(view: ResultView, selection: Selection, header: Boolean, delimiter: Char): String =
+  delimitedLines((if (header) listOf(selection.columns.map { view.columns[it] }) else emptyList()) + selection.rows.map { r -> selection.columns.map { view.cells[r][it] } }, delimiter)
+
+/** Copy Column: the values of the given rows, one per line. Plain text, not CSV: no header, no guard. */
+fun columnText(view: ResultView, rows: List<Int>, column: Int): String = rows.joinToString("\n") { view.cells[it][column] }
+
+/**
+ * The status line for the selected cells of one column, or null when it has fewer than 2 cells or no
+ * number. Count is the cells with a value; Sum, Avg, Min and Max read the numbers only, so a tagged
+ * exact `{"N": …}` (JSON text) is left out rather than rounded.
+ */
+fun totals(cells: List<Pair<String, CellKind>>): String? {
+  if (cells.size < 2) return null
+  val numbers = cells.filter { it.second == CellKind.NUMBER }.map { it.first.toBigDecimal() }
+  if (numbers.isEmpty()) return null
+  val sum = numbers.fold(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)
+  val count = cells.count { !it.second.isEmpty() }
+  return "Count $count · Sum ${jsNumber(sum.toDouble())} · Avg ${jsNumber(sum.toDouble() / numbers.size)} · " +
+    "Min ${jsNumber(numbers.min().toDouble())} · Max ${jsNumber(numbers.max().toDouble())}"
+}
+
+/**
+ * The distinct values of a column for its filter list, in sort order. A `null` entry is `(empty)`: it
+ * stands for a missing value and `null` alike, and comes first.
+ */
+fun distinctValues(view: ResultView, column: Int): List<String?> {
+  val kinds = view.kinds.map { it[column] }
+  val numeric = isNumericColumn(kinds)
+  val values = view.cells.indices.filterNot { kinds[it].isEmpty() }.map { view.cells[it][column] }.distinct()
+    .sortedWith { a, b -> compareCellTexts(a, b, numeric) }
+  return (if (kinds.any { it.isEmpty() }) listOf(null) else emptyList()) + values
+}
+
+/** A row passes when, in every filtered column, its value is one of the kept values. */
+fun matchesColumnFilters(view: ResultView, row: Int, filters: Map<Int, Set<String?>>): Boolean =
+  filters.all { (column, kept) -> (if (view.kinds[row][column].isEmpty()) null else view.cells[row][column]) in kept }
 
 /** One object per row, with the selected keys in view order. A row that lacks a key leaves it out. */
 fun selectionJson(view: ResultView, selection: Selection): String = json(
@@ -106,22 +149,33 @@ fun selectionMarkdown(view: ResultView, selection: Selection): String {
     .joinToString("\n")
 }
 
-/** What the value viewer shows: a string as it is, any other value as indented JSON. */
+/**
+ * What the value viewer shows: indented JSON for a nested value and for a string that holds a JSON
+ * object or array; any other value as Copy Value gives it.
+ */
 fun viewerText(view: ResultView, row: Int, column: Int): String {
   val value = view.values[row].get(view.columns[column]) ?: return ""
-  return if (value is JsonPrimitive && value.isString) value.asString else json(value, "  ")
+  if (value is JsonPrimitive && value.isString) {
+    val text = value.asString
+    val parsed = text.trim().takeIf { it.startsWith("{") || it.startsWith("[") }?.let { runCatching { com.google.gson.JsonParser.parseString(it) }.getOrNull() }
+    return if (parsed != null && (parsed.isJsonObject || parsed.isJsonArray)) json(parsed, "  ") else text
+  }
+  return if (value is JsonPrimitive || value is JsonNull) json(value) else json(value, "  ")
 }
 
 private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][+-]?\d+)?""")
 private const val FORMULA_START = "=+-@\t\r\n"
 
 /** A spreadsheet runs a cell that starts with a formula character, unless it is a plain number. */
-private fun csvField(text: String): String {
+private fun delimitedField(text: String, delimiter: Char): String {
   val guarded = if (text.isNotEmpty() && text[0] in FORMULA_START && !NUMBER.matches(text)) "'$text" else text
-  return if (guarded.any { it == '"' || it == ',' || it == '\r' || it == '\n' }) "\"${guarded.replace("\"", "\"\"")}\"" else guarded
+  return if (guarded.any { it == '"' || it == delimiter || it == '\r' || it == '\n' }) "\"${guarded.replace("\"", "\"\"")}\"" else guarded
 }
 
-fun csv(lines: List<List<String>>): String = lines.joinToString("\r\n") { line -> line.joinToString(",", transform = ::csvField) }
+private fun delimitedLines(lines: List<List<String>>, delimiter: Char): String =
+  lines.joinToString("\r\n") { line -> line.joinToString(delimiter.toString()) { delimitedField(it, delimiter) } }
+
+fun csv(lines: List<List<String>>): String = delimitedLines(lines, ',')
 
 fun toCsv(result: RunResult): String = csv(listOf(result.columns) + resultView(result).cells)
 

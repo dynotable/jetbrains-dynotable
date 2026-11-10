@@ -306,46 +306,59 @@ class RunTest {
       val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
       ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
     }
-    assertEquals("'=1+1,\"{\"\"qty\"\":1}\"", clipboard())
+    // Cmd+C copies TSV, with the same guard and quoting as CSV.
+    assertEquals("'=1+1\t\"{\"\"qty\"\":1}\"", clipboard())
   }
 
-  // Sort, filter and hidden columns all go through the view-to-model mapping; a copy that reads model
-  // order, or every column, copies rows the user does not see.
+  // Sort, filters, a frozen column and hidden columns all go through the view-to-model mapping; a copy
+  // that reads model order, or every column, copies cells the user does not see.
   @Test
-  fun `numbers sort by value, the filter hides rows, and Cmd+C copies only the shown cells`() = integrationTest {
-    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", "v"), listOf(mapOf("n" to 10, "v" to "ten"), mapOf("n" to 9, "v" to "nine"), mapOf("n" to 100, "v" to "hundred"))) }
+  fun `the grid sorts, filters, freezes and copies only the shown cells in view order`() = integrationTest {
+    val rows = listOf(mapOf("n" to 10, "v" to "ten"), mapOf("n" to 9, "v" to "nine"), mapOf("n" to 100, "v" to "hundred"), mapOf("v" to "none"))
+    h.fake.handle("command:$RUN_STATEMENT") { _, _ -> answer(listOf("n", "v"), rows) }
     start()
     val panel = panel()
     runIn(open("grid.dynotable.sql"))
     waitFor("the result view") { panel.shown is View.Result }
+    val table = panel.table
+    fun column0() = (0 until table.rowCount).map { table.getValueAt(it, 0).toString() }
+    fun copy() {
+      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
+      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
+      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+    }
     withContext(Dispatchers.EDT) {
-      val table = panel.table
+      // By value, and the missing value last in both directions.
       table.rowSorter.toggleSortOrder(0)
-      assertEquals(listOf("9", "10", "100"), (0 until table.rowCount).map { table.getValueAt(it, 0) })
+      assertEquals(listOf("9", "10", "100", ""), column0())
+      table.rowSorter.toggleSortOrder(0)
+      assertEquals(listOf("100", "10", "9", ""), column0())
       panel.grid.find.filterRows.isSelected = true
       panel.grid.find.field.text = "TEN"
       assertEquals(1, table.rowCount)
-      assertEquals("1 of 3 rows shown", panel.grid.shownNote.text)
+      assertEquals("1 of 4 rows shown", panel.grid.shownNote.text)
       panel.grid.find.field.text = ""
+      table.setColumnFilter(1, setOf("nine", "none"))
+      assertEquals(listOf("9", ""), column0())
+      assertEquals("2 of 4 rows shown", panel.grid.shownNote.text)
+      table.setColumnFilter(1, null)
+      // The frozen column leaves the main grid but still comes first in a copy.
+      panel.grid.freeze(true)
+      assertEquals(1, table.columnCount)
+      table.selectRows(0, 1)
+      copy()
+    }
+    assertEquals("100\thundred\r\n10\tten", clipboard())
+    withContext(Dispatchers.EDT) {
+      panel.grid.freeze(false)
+      assertEquals(listOf("n", "v"), (0 until table.columnCount).map(table::getColumnName))
       table.columnModel.removeColumn(table.columnModel.getColumn(1))
       table.setRowSelectionInterval(0, 1)
-      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
-      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
-      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
+      copy()
     }
-    assertEquals("9\r\n10", clipboard())
-    // One cell copies its value as it is, with no CSV quoting or guard.
-    withContext(Dispatchers.EDT) {
-      val table = panel.table
-      table.changeSelection(0, 0, false, false)
-      val context = CustomizedDataContext.withSnapshot(DataContext.EMPTY_CONTEXT) { table.uiDataSnapshot(it) }
-      val copy = ActionManager.getInstance().getAction(IdeActions.ACTION_COPY)
-      ActionUtil.performAction(copy, TestActionEvent.createTestEvent(copy, context))
-    }
-    assertEquals("9", clipboard())
+    assertEquals("100\r\n10", clipboard())
     // A click selects one cell, as in the IDE's data grids, not the whole row.
     withContext(Dispatchers.EDT) {
-      val table = panel.table
       table.createDefaultColumnsFromModel()
       table.changeSelection(1, 0, false, false)
       assertTrue(table.isCellSelected(1, 0))

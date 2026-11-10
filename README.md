@@ -93,14 +93,19 @@ All actions are in **Tools › DynoTable** and in **Find Action**.
   toolbar copies the rows as CSV or JSON. **Cancel Run** (the stop icon) stops the run. Closing the results tab also stops it. You can run one
   statement at a time.
   - Click a cell, drag over cells, click a row number or click a column name to select. Cmd+C
-    (Ctrl+C) copies the selection: one cell as its value, more cells as CSV.
+    (Ctrl+C) copies the selected cells as tab-separated text with no header, ready to paste into a
+    spreadsheet. When you select 2 or more number cells in a column, a line under the grid shows
+    their count, sum, average, minimum and maximum.
   - Click the sort icon in a column header to sort. Drag a column header to move the column.
+  - Click the filter icon in a column header to keep only some of its values. **(empty)** stands for
+    missing and `null` values.
   - **Find** (Cmd+F, Ctrl+F) opens a find bar above the grid. It highlights the matching cells, its
     arrows move to the next match, and **Filter rows** hides the rows without a match.
   - **Open in Value Editor** (Shift+Enter, or a double-click) shows the full value of a cell in the
     side panel. **Show Record View** (Shift+Cmd+Enter) shows the row as a list of columns and values.
-  - Right-click for **Copy As** CSV, JSON or Markdown, **Hide Column** and **Show All Columns**.
-    Right-click a column header to sort.
+  - Right-click a cell for **Copy Value** and **Copy As** CSV, JSON or Markdown. Right-click a column
+    header for **Copy Column**, **Freeze First Column**, **Hide Column** and sorting.
+  - **Export…** in the toolbar saves all rows as CSV, JSON or Markdown.
 - **Open in DynoTable.** Click the **Open in DynoTable** lens, or press Cmd+Shift+Enter
   (Ctrl+Shift+Enter) with the caret in the statement. SQL and PartiQL only.
 - **Shortcuts.** In DynoTable files, Cmd+Enter and Cmd+Shift+Enter run the DynoTable actions before

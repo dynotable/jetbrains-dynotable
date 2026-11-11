@@ -277,7 +277,7 @@ class ResultsPanel(private val project: Project) : SimpleToolWindowPanel(true, t
     }
     val text = when (format) {
       "CSV" -> toCsv(result.run)
-      "JSON" -> toJson(result.run)
+      "JSON" -> result.shown.let { selectionJson(it, Selection(it.cells.indices.toList(), it.columns.indices.toList())) }
       else -> result.shown.let { selectionMarkdown(it, Selection(it.cells.indices.toList(), it.columns.indices.toList())) }
     }
     val target = FileChooserFactory.getInstance()

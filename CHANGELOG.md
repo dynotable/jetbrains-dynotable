@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- DynoTable Results: a Find match in the row of the selected cell keeps its highlight. The "N of M rows
+  shown" note lines up with the toolbar. The status bar shows the selection totals only while the
+  grid has the focus, as the IDE's own data grids do.
+
 ## 0.1.1 (2026-11-11)
 
 - DynoTable Results is a data grid that looks and works like the IDE's own data grids:

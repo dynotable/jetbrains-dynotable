@@ -24,9 +24,13 @@ class SqlFilesProjectsTest {
   private val b = projectFixture(dirB, openAfterCreation = true)
   private val moduleB = b.moduleFixture(dirB, addPathToSourceRoot = true)
 
+  // A file in a directory the VFS has not seen yet can come back null on the first refresh: refresh the
+  // directory first, and look the file up again once.
   private fun write(path: Path): VirtualFile {
     path.writeText("SELECT 1")
-    return LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)!!
+    val fs = LocalFileSystem.getInstance()
+    fs.refreshAndFindFileByNioFile(path.parent)?.refresh(false, false)
+    return fs.refreshAndFindFileByNioFile(path) ?: fs.refreshAndFindFileByNioFile(path)!!
   }
 
   @Test

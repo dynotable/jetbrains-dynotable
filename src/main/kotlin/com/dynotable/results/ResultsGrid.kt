@@ -49,6 +49,9 @@ import java.awt.CardLayout
 import java.awt.Color
 import java.awt.Component
 import java.awt.FlowLayout
+import java.awt.GridBagLayout
+import java.awt.event.FocusAdapter
+import java.awt.event.FocusEvent
 import java.awt.datatransfer.StringSelection
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
@@ -293,6 +296,8 @@ class ResultsTable : JBTable(), UiDataProvider {
     frozenIsCurrent = false
     setColumnSelectionInterval(column, column)
     setRowSelectionInterval(0, rowCount - 1)
+    // A header click selects the column; the grid takes the focus so its totals show.
+    requestFocusInWindow()
   }
 
   /** Whole rows: every shown column, the pinned ones too. */
@@ -329,6 +334,14 @@ class ResultsTable : JBTable(), UiDataProvider {
   private fun sortOrderOf(modelColumn: Int): SortOrder =
     sorter?.sortKeys?.firstOrNull { it.column == modelColumn }?.sortOrder ?: SortOrder.UNSORTED
 
+  /** True when the find bar's text is in the cell's text. */
+  internal fun isMatch(row: Int, column: Int): Boolean =
+    highlight.isNotBlank() && (getValueAt(row, column)?.toString() ?: "").contains(highlight.trim(), ignoreCase = true)
+
+  // The table paints the selected cell's row after the renderer; a find match in that row must keep its colour.
+  override fun prepareRenderer(renderer: TableCellRenderer, row: Int, column: Int): Component =
+    super.prepareRenderer(renderer, row, column).also { if (!isCellSelected(row, column) && isMatch(row, column)) it.background = searchResultBackground() }
+
   override fun uiDataSnapshot(sink: DataSink) {
     sink[PlatformDataKeys.COPY_PROVIDER] = copier
   }
@@ -341,8 +354,7 @@ class ResultsTable : JBTable(), UiDataProvider {
       if (kind == CellKind.NULL) text = NULL_TEXT
       horizontalAlignment = if (kind == CellKind.NUMBER) SwingConstants.RIGHT else SwingConstants.LEFT
       if (!isSelected) {
-        val match = highlight.isNotBlank() && (value?.toString() ?: "").contains(highlight.trim(), ignoreCase = true)
-        background = if (match) searchResultBackground() else table.background
+        background = if ((table as? ResultsTable)?.isMatch(row, column) == true) searchResultBackground() else table.background
         foreground = if (kind == CellKind.NULL) NamedColorUtil.getInactiveTextColor() else table.foreground
       }
       // JSON starts with `{` or `[`, never `<html>`: the tooltip stays text.
@@ -391,8 +403,10 @@ class ResultsTable : JBTable(), UiDataProvider {
 class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(BorderLayout()) {
   val table = ResultsTable()
   internal val shownNote = plainLabel().apply { foreground = NamedColorUtil.getInactiveTextColor() }
-  val toolbar = JPanel(FlowLayout(FlowLayout.RIGHT, JBUI.scale(8), 0)).apply {
+  // A grid bag centres the note on the toolbar's line; a flow layout pins it to the top.
+  val toolbar = JPanel(GridBagLayout()).apply {
     isOpaque = false
+    border = JBUI.Borders.emptyRight(8)
     add(shownNote)
   }
   internal val find = FindBar(table) { refresh() }
@@ -536,6 +550,11 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
       selectionChanged()
     }
     table.columnModel.selectionModel.addListSelectionListener { selectionChanged() }
+    table.addFocusListener(object : FocusAdapter() {
+      override fun focusGained(e: FocusEvent) = showTotals()
+
+      override fun focusLost(e: FocusEvent) = showTotals()
+    })
     object : DoubleClickListener() {
       override fun onDoubleClick(event: MouseEvent): Boolean {
         if (table.rowAtPoint(event.point) < 0) return false
@@ -561,7 +580,13 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
 
   private fun selectionChanged() {
     details.update()
-    Results.getInstance(project).showTotals(table.selectionTotals().orEmpty())
+    showTotals()
+  }
+
+  // As in the IDE's data grids, the status bar shows the totals only while the grid has the focus.
+  private fun showTotals() {
+    val focused = table.hasFocus() || table.frozen?.hasFocus() == true
+    Results.getInstance(project).showTotals(if (focused) table.selectionTotals().orEmpty() else "")
   }
 
   /**
@@ -626,6 +651,11 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
         table.columnModel.selectionModel.clearSelection()
         selectionChanged()
       }
+    })
+    addFocusListener(object : FocusAdapter() {
+      override fun focusGained(e: FocusEvent) = showTotals()
+
+      override fun focusLost(e: FocusEvent) = showTotals()
     })
     val pinned = this
     PopupHandler.installPopupMenu(tableHeader, DefaultActionGroup(

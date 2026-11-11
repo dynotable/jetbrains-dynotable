@@ -163,10 +163,65 @@ fun viewerText(view: ResultView, row: Int, column: Int): String {
   val value = view.values[row].get(view.columns[column]) ?: return ""
   if (value is JsonPrimitive && value.isString) {
     val text = value.asString
-    val parsed = text.trim().takeIf { it.startsWith("{") || it.startsWith("[") }?.let { runCatching { com.google.gson.JsonParser.parseString(it) }.getOrNull() }
-    return if (parsed != null && (parsed.isJsonObject || parsed.isJsonArray)) json(parsed, "  ") else text
+    return if (isJsonContainer(text)) reindent(text) else text
   }
   return if (value is JsonPrimitive || value is JsonNull) json(value) else json(value, "  ")
+}
+
+/** As JavaScript `JSON.parse`: strict, one value, and that value an object or an array. */
+private fun isJsonContainer(text: String): Boolean {
+  if (!text.trim().let { it.startsWith("{") || it.startsWith("[") }) return false
+  return runCatching {
+    val reader = com.google.gson.stream.JsonReader(java.io.StringReader(text)).apply { isLenient = false }
+    com.google.gson.Gson().getAdapter(JsonElement::class.java).read(reader)
+    reader.peek() == com.google.gson.stream.JsonToken.END_DOCUMENT
+  }.getOrDefault(false)
+}
+
+/**
+ * Lays out valid JSON text as `JSON.stringify(value, null, 2)` does, from its own tokens. It never
+ * prints a parsed value, so a big number, `1.0`, an escape and a duplicate key stay as written.
+ */
+private fun reindent(text: String): String {
+  val tokens = mutableListOf<String>()
+  var i = 0
+  while (i < text.length) {
+    val c = text[i]
+    when {
+      c.isWhitespace() -> i++
+      c in "{}[],:" -> tokens += c.toString().also { i++ }
+      c == '"' -> {
+        var end = i + 1
+        while (text[end] != '"') end += if (text[end] == '\\') 2 else 1
+        tokens += text.substring(i, end + 1)
+        i = end + 1
+      }
+      else -> {
+        var end = i
+        while (end < text.length && !text[end].isWhitespace() && text[end] !in "{}[],:\"") end++
+        tokens += text.substring(i, end)
+        i = end
+      }
+    }
+  }
+  val out = StringBuilder()
+  var depth = 0
+  fun newline() = out.append('\n').append("  ".repeat(depth))
+  var t = 0
+  while (t < tokens.size) {
+    val token = tokens[t]
+    val next = tokens.getOrNull(t + 1)
+    when {
+      (token == "{" && next == "}") || (token == "[" && next == "]") -> out.append(token).append(next).also { t++ }
+      token == "{" || token == "[" -> out.append(token).also { depth++; newline() }
+      token == "}" || token == "]" -> { depth--; newline(); out.append(token) }
+      token == "," -> out.append(token).also { newline() }
+      token == ":" -> out.append(": ")
+      else -> out.append(token)
+    }
+    t++
+  }
+  return out.toString()
 }
 
 private val NUMBER = Regex("""-?\d+(\.\d+)?([eE][+-]?\d+)?""")

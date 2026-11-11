@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- DynoTable Results: the value viewer indents a string that holds JSON without changing its text. A
+  large integer, `1.0` and a `\u` escape stay as they are.
+
 ## 0.1.2 (2026-11-11)
 
 - DynoTable Results: a Find match in the row of the selected cell keeps its highlight. The "N of M rows

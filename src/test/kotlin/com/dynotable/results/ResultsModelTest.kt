@@ -207,6 +207,18 @@ class ResultsModelTest {
     assertEquals("{not json", viewerText(resultView(one("{not json")), 0, 0))
   }
 
+  // A parse and print rounded a big integer, wrote `1.0` as `1` and decoded escapes: the viewer showed
+  // a value the string does not hold. Text that JavaScript JSON.parse rejects stays as it is.
+  @Test
+  fun `the value viewer indents a JSON string without changing its text`() {
+    val text = """{"id":12345678901234567890,"n":1.0,"s":"\u00e9 \"q\"","e":{},"a":[]}"""
+    assertEquals(
+      "{\n  \"id\": 12345678901234567890,\n  \"n\": 1.0,\n  \"s\": \"\\u00e9 \\\"q\\\"\",\n  \"e\": {},\n  \"a\": []\n}",
+      viewerText(resultView(one(text)), 0, 0),
+    )
+    assertEquals("{a:1}", viewerText(resultView(one("{a:1}")), 0, 0))
+  }
+
   // Cmd+C pastes as TSV: a tab must not split the field, a comma must not quote it, and the value
   // stays as the IDE's data grids copy it, with no formula guard.
   @Test

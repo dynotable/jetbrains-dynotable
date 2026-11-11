@@ -30,6 +30,11 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <p>0.1.3</p>
+    <ul>
+      <li>DynoTable Results: the value viewer indents a string that holds JSON without changing its text. A large
+        integer, <code>1.0</code> and a <code>\u</code> escape stay as they are.</li>
+    </ul>
     <p>0.1.2</p>
     <ul>
       <li>DynoTable Results: a Find match in the row of the selected cell keeps its highlight, the "N of M rows

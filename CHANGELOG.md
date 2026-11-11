@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 (2026-11-11)
 
 - DynoTable Results: the value viewer indents a string that holds JSON without changing its text. A
   large integer, `1.0` and a `\u` escape stay as they are.

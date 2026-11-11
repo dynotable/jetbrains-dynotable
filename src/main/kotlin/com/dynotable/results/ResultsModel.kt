@@ -145,9 +145,12 @@ fun selectionJson(view: ResultView, selection: Selection): String = json(
   "  ",
 )
 
-/** A GitHub table: a `|` in a cell is escaped, and a line break becomes a space. */
+/**
+ * A GitHub table: `\` becomes `\\` first, then `|` becomes `\|`, so a cell's own backslash before a
+ * pipe cannot unescape it and split the row. A line break becomes a space. Lines end in LF.
+ */
 fun selectionMarkdown(view: ResultView, selection: Selection): String {
-  fun line(cells: List<String>) = cells.joinToString(" | ", "| ", " |") { it.replace("|", "\\|").replace(Regex("\r\n|\r|\n"), " ") }
+  fun line(cells: List<String>) = cells.joinToString(" | ", "| ", " |") { it.replace("\\", "\\\\").replace("|", "\\|").replace(Regex("\r\n|\r|\n"), " ") }
   return (listOf(line(selection.columns.map { view.columns[it] }), line(selection.columns.map { "---" })) + selection.rows.map { r -> line(selection.columns.map { view.cells[r][it] }) })
     .joinToString("\n")
 }

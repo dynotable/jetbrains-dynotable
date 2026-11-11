@@ -185,6 +185,13 @@ class ResultsModelTest {
     assertEquals("[\n  {\n    \"c\": 2\n  }\n]", selectionJson(two, Selection(listOf(1), listOf(2, 1))))
   }
 
+  // A cell's own `\` before a `|` would unescape it and split the row.
+  @Test
+  fun `Markdown escapes a backslash before it escapes a pipe`() {
+    val shown = resultView(one("a\\|b"))
+    assertEquals("| v |\n| --- |\n| a\\\\\\|b |", selectionMarkdown(shown, Selection(listOf(0), listOf(0))))
+  }
+
   // An unescaped `|` adds a column, and a line break ends the table.
   @Test
   fun `a selection as Markdown escapes the pipe and folds line breaks`() {

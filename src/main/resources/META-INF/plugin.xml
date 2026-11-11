@@ -30,6 +30,17 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <p>0.1.1</p>
+    <ul>
+      <li>DynoTable Results is a data grid like the IDE's own: cell, range, row and column selection;
+        Cmd+C (Ctrl+C) copies one cell as its value and more cells as tab-separated text; selection totals in
+        the status bar; sort by the header's sort icon; a filter per column; Find (Cmd+F) with Filter rows;
+        Pin Column; a side panel with Record View and the Value Editor; Copy As CSV, JSON or Markdown; and
+        Export… to a file.</li>
+      <li>The statement text no longer shows above the rows.</li>
+      <li>The plugin has its own icon, and the tool window icons turn white when their tool window is
+        active.</li>
+    </ul>
     <p>0.1.0: first release. Needs a JetBrains IDE 2026.3 or later and DynoTable 1.19.0 or later.</p>
     <ul>
       <li>Language features from the DynoTable app for <code>*.dynotable.sql</code>, <code>*.partiql</code> and

@@ -742,7 +742,7 @@ class ResultsGrid(private val project: Project, parent: Disposable) : JPanel(Bor
     add(action("Copy Column", { leadColumn() >= 0 }) {
       val column = table.convertColumnIndexToModel(leadColumn())
       val rows = (0 until table.rowCount).map(table::convertRowIndexToModel)
-      copy(columnText(table.view, rows, column), "Copied ${rows.size} values of ${table.view.columns[column]}.")
+      copy(columnText(table.view, rows, column), "Copied ${rows.size} ${if (rows.size == 1) "value" else "values"} of ${table.view.columns[column]}.")
     })
     add(action("Select Column", { leadColumn() >= 0 }) { table.selectColumn(leadColumn()) })
     addSeparator()

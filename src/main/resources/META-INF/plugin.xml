@@ -30,6 +30,12 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <p>0.1.2</p>
+    <ul>
+      <li>DynoTable Results: a Find match in the row of the selected cell keeps its highlight, the "N of M rows
+        shown" note lines up with the toolbar, and the status bar shows the selection totals only while the grid
+        has the focus.</li>
+    </ul>
     <p>0.1.1</p>
     <ul>
       <li>DynoTable Results is a data grid like the IDE's own: cell, range, row and column selection;

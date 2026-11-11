@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-11)
 
 - DynoTable Results is a data grid that looks and works like the IDE's own data grids:
   - Cells use the editor font. Numbers align right, and `null` shows as `<null>`. Columns fit their
@@ -20,6 +20,8 @@
 - DynoTable Results has a toolbar: Cancel Run, a Copy All Rows menu (CSV or JSON), Export… (CSV, JSON
   or Markdown, to a file), Find, Show Record View and Open in Value Editor. It no longer shows the
   statement text above the rows.
+- The plugin has its own icon, in Settings › Plugins and on the Marketplace.
+- The DynoTable tool window icons turn white when their tool window is active, as the IDE's own do.
 
 ## 0.1.0
 

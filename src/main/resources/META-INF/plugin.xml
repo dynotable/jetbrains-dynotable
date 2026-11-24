@@ -26,10 +26,15 @@
         default. You do this one time. After that, the plugin starts DynoTable when it needs the app.</li>
       <li>A trusted project.</li>
     </ul>
-    <p>Full guide: <a href="https://dynotable.com/docs/editors">dynotable.com/docs/editors</a>.</p>
+    <p>Full guide: <a href="https://dynotable.com/docs/jetbrains">dynotable.com/docs/jetbrains</a>.</p>
   ]]></description>
 
   <change-notes><![CDATA[
+    <p>0.1.4</p>
+    <ul>
+      <li>Open DynoTable Documentation and the plugin description link to the plugin's own guide,
+        <a href="https://dynotable.com/docs/jetbrains">dynotable.com/docs/jetbrains</a>.</li>
+    </ul>
     <p>0.1.3</p>
     <ul>
       <li>DynoTable Results: the value viewer indents a string that holds JSON without changing its text. A large

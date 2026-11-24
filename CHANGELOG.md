@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 (2026-11-24)
+
+- Open DynoTable Documentation, the README and the plugin description link to the plugin's own guide,
+  [dynotable.com/docs/jetbrains](https://dynotable.com/docs/jetbrains), in place of the VS Code page.
+
 ## 0.1.3 (2026-11-11)
 
 - DynoTable Results: the value viewer indents a string that holds JSON without changing its text. A

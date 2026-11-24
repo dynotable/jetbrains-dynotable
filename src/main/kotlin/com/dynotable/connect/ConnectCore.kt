@@ -59,7 +59,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 
 const val DOWNLOAD_URL = "https://dynotable.com/download"
-const val DOCS_URL = "https://dynotable.com/docs/editors"
+const val DOCS_URL = "https://dynotable.com/docs/jetbrains"
 
 /**
  * The project's connection to DynoTable: the [ConnectMachine] with the real app, socket and platform

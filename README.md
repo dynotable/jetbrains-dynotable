@@ -10,7 +10,7 @@ desktop app serves the language features and runs the queries.
 - An explorer of the tables and indices of your DynoTable profile.
 - **Open in DynoTable** opens the app at the statement's table or index.
 
-Full guide: [dynotable.com/docs/editors](https://dynotable.com/docs/editors).
+Full guide: [dynotable.com/docs/jetbrains](https://dynotable.com/docs/jetbrains).
 
 ## Examples
 

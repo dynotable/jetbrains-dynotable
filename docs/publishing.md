@@ -5,9 +5,9 @@
 - DynoTable 1.19.0 or later is released. `MIN_APP_VERSION` in
   `src/main/kotlin/com/dynotable/connect/Discovery.kt` is that version. The README, `CHANGELOG.md`
   and the `plugin.xml` description state the same version.
-- [dynotable.com/docs/editors](https://dynotable.com/docs/editors) has a JetBrains section. The
-  README, **Open DynoTable Documentation** and the **Open Documentation** action on a DynoTable
-  message link to that page.
+- [dynotable.com/docs/jetbrains](https://dynotable.com/docs/jetbrains) is the plugin's guide. The
+  README, the `plugin.xml` description, **Open DynoTable Documentation** and the **Open
+  Documentation** action on a DynoTable message link to that page.
 - The repository `dynotable/jetbrains-dynotable` is on GitHub, with the four release secrets (see
   [Accounts and signing](#accounts-and-signing)).
 - Check Windows and Linux on real machines before the README or the listing claims them.

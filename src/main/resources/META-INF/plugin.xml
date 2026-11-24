@@ -30,6 +30,11 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <p>0.1.5</p>
+    <ul>
+      <li>DynoTable Results: the value viewer formats a string as JSON only when JavaScript <code>JSON.parse</code>
+        would accept it.</li>
+    </ul>
     <p>0.1.4</p>
     <ul>
       <li>Open DynoTable Documentation and the plugin description link to the plugin's own guide,

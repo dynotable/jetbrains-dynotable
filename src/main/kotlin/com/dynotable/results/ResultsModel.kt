@@ -172,7 +172,8 @@ fun viewerText(view: ResultView, row: Int, column: Int): String {
 private fun isJsonContainer(text: String): Boolean {
   if (!text.trim().let { it.startsWith("{") || it.startsWith("[") }) return false
   return runCatching {
-    val reader = com.google.gson.stream.JsonReader(java.io.StringReader(text)).apply { isLenient = false }
+    // STRICT, not LEGACY_STRICT: JSON.parse rejects a raw control character in a string and the escape `\'`.
+    val reader = com.google.gson.stream.JsonReader(java.io.StringReader(text)).apply { strictness = com.google.gson.Strictness.STRICT }
     com.google.gson.Gson().getAdapter(JsonElement::class.java).read(reader)
     reader.peek() == com.google.gson.stream.JsonToken.END_DOCUMENT
   }.getOrDefault(false)

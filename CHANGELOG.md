@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 (2026-11-24)
+
+- DynoTable Results: the value viewer formats a string as JSON only when JavaScript `JSON.parse` would
+  accept it. A raw tab in a string value or a `\'` escape now keeps the text as it is.
+
 ## 0.1.4 (2026-11-24)
 
 - Open DynoTable Documentation, the README and the plugin description link to the plugin's own guide,

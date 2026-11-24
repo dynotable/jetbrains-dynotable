@@ -217,6 +217,9 @@ class ResultsModelTest {
       viewerText(resultView(one(text)), 0, 0),
     )
     assertEquals("{a:1}", viewerText(resultView(one("{a:1}")), 0, 0))
+    // Gson's legacy strict mode accepts these two; JSON.parse does not.
+    assertEquals("{\"a\":\"x\ty\"}", viewerText(resultView(one("{\"a\":\"x\ty\"}")), 0, 0))
+    assertEquals("{\"a\":\"\\'\"}", viewerText(resultView(one("{\"a\":\"\\'\"}")), 0, 0))
   }
 
   // Cmd+C pastes as TSV: a tab must not split the field, a comma must not quote it, and the value
